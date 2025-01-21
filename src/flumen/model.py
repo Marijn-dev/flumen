@@ -106,6 +106,8 @@ class CausalFlowModelV2(nn.Module):
         # Convolutional decoder 
         self.decoder = CONV_Decoder(in_size=u_dnn_isz,
                                     out_size=output_dim)
+        self.decoder2 = CONV_Decoder2(in_size=u_dnn_isz,
+                                    out_size=output_dim)
 
     def forward(self, x, rnn_input, deltas):
         h0 = self.encoder(x)
@@ -121,7 +123,7 @@ class CausalFlowModelV2(nn.Module):
 
         encoded_controls = (1 - deltas) * h_shift + deltas * h
        
-        output = self.decoder(encoded_controls[range(encoded_controls.shape[0]),
+        output = self.decoder2(encoded_controls[range(encoded_controls.shape[0]),
                                              h_lens - 1, :])
         return output
 
@@ -169,7 +171,7 @@ class CONV_Encoder(nn.Module):
         self.in_size = in_size
         self.out_size = out_size
         # activation and pool layer
-        self.activation = nn.Tanh()
+        self.activation = nn.ReLU()
         self.pool = nn.MaxPool1d(kernel_size=2,stride=2)
         
         # convolutional layers
@@ -186,6 +188,7 @@ class CONV_Encoder(nn.Module):
         input = self.activation(self.conv1(input))
         input = self.pool(input)
         input = self.activation(self.conv2(input))
+        print(input.shape)
         input = self.pool(input)
         input = self.activation(self.conv3(input))
         
@@ -208,7 +211,7 @@ class CONV_Decoder(nn.Module):
         self.in_size = in_size
         self.out_size = out_size
         # activation and pool layer
-        self.activation = nn.Tanh()
+        self.activation = nn.ReLU()
         self.pool = nn.MaxPool1d(kernel_size=2,stride=2)
         
         # convolutional layers
@@ -239,11 +242,7 @@ class CONV_Decoder(nn.Module):
         input = self.activation(self.TransposeConv3(input))
         input = self.activation(self.TransposeConv4(input))
 
-        # reshape for linear layer
-        # input = input.view(input.size(0),1,-1)
-        # print(input.shape)
         
-        # final layer is linear layer
         input = self.fc2(input)
 
         # reshape for correct output
@@ -252,3 +251,45 @@ class CONV_Decoder(nn.Module):
         return input
 
 
+
+class CONV_Decoder2(nn.Module):
+    def __init__(self,
+                 in_size,
+                 out_size):         
+        super(CONV_Decoder2, self).__init__()
+        self.in_size = in_size
+        self.out_size = out_size
+        # activation and pool layer
+        self.activation = nn.ReLU()
+        self.pool = nn.MaxPool1d(kernel_size=2,stride=2)
+        
+        # convolutional layers
+        self.conv1 = nn.Conv1d(in_channels=1,out_channels=16,kernel_size=3,padding=1)
+        self.conv2 = nn.Conv1d(in_channels=16,out_channels=8,kernel_size=3,padding=1)
+        self.conv3 = nn.Conv1d(in_channels=8,out_channels=4,kernel_size=3,padding=1)
+        
+        # linear layer to get right dimensionality of hidden states
+        self.fc2 = nn.Linear(in_features=100,out_features=out_size)
+        self.fc1 = nn.Linear(in_features=in_size,out_features=100)
+        
+
+    def forward(self, input):
+      # reshape input from [1,batch_size,channel] -> [batch_size,1,channel] ??
+        input = input.view(-1,1,self.in_size)
+        input = self.fc1(input)
+        input = self.activation(self.conv1(input))
+        input = self.pool(input)
+        input = self.activation(self.conv2(input))
+        input = self.pool(input)
+        input = self.activation(self.conv3(input))
+        
+        ## omit this one cause more downsizing isnt needed
+        # input = self.pool(input)
+
+        # flatten  
+        input = input.view(input.size(0),1,-1)
+        input = self.fc2(input)
+        
+        # reshape to (batch_size,out_size)
+        input = input.view(-1,self.out_size)
+        return input
