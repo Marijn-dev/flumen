@@ -65,7 +65,7 @@ class RawTrajectoryDataset(Dataset):
             # Compute SVD (spatial modes)
             state_space_time = sample["state"].reshape(self.state_dim,-1)
             time_length = len(state_space_time[0])
-            U_, S_, V_ = np.linalg.svd(state_space_time,full_matrices=True)
+            U_, S_, V_ = np.linalg.svd(state_space_time,full_matrices=False)
             
             self.U.append(
                 torch.from_numpy(U_).type(torch.get_default_dtype()))
@@ -92,7 +92,14 @@ class RawTrajectoryDataset(Dataset):
             # Projection back to W
             self.W.append(
                 torch.from_numpy((U_@(A_.reshape(-1,time_length))).reshape(time_length,-1)).type(torch.get_default_dtype()))
-        self.control_dim_galerkin = U_.shape[1] # amount of columns  
+            
+        self.dim_galerkin = U_.shape[1] # amount of columns  
+        self.galerkin = True
+        if self.galerkin: # change dimensions x -> a
+            self.state_dim = self.dim_galerkin
+            self.control_dim = self.dim_galerkin
+            self.output_dim = self.dim_galerkin
+            self.mask = output_mask[:self.dim_galerkin]
 
     @classmethod
     def generate(cls, generator, time_horizon, n_trajectories, n_samples,
@@ -131,20 +138,14 @@ class TrajectoryDataset(Dataset):
                  raw_data: RawTrajectoryDataset,
                  max_seq_len=-1,
                  n_samples=1):
+       
+        self.control_dim = raw_data.control_dim
+        self.state_dim = raw_data.state_dim 
+        self.output_dim = raw_data.state_dim
+        mask = tuple(bool(v) for v in raw_data.mask)
 
-        
-        galerkin = True
-        if galerkin:
-            self.control_dim = raw_data.control_dim_galerkin # Should be changed when taking truncated SVD
-
-        else:
-            self.control_dim = raw_data.control_dim
-
-        self.state_dim = raw_data.state_dim
-        self.output_dim = raw_data.output_dim
         self.delta = raw_data.delta
 
-        mask = tuple(bool(v) for v in raw_data.mask)
 
         init_state = []
         state = []
@@ -154,9 +155,8 @@ class TrajectoryDataset(Dataset):
         rng = np.random.default_rng()
 
         k_tr = 0
-
         for (x0, x0_n, t, y, y_n, u,U,S,V,a_initial,A,u_proj,W) in raw_data:
-            if galerkin:
+            if raw_data.galerkin:
                 y = A
                 x0 = a_initial
                 u = u_proj  
