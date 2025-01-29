@@ -89,7 +89,7 @@ class RawTrajectoryDataset(Dataset):
             self.control_seq_projected.append(
                 torch.from_numpy(np.transpose(Br @ np.transpose(sample["control"]))).type(torch.get_default_dtype()))
             
-            # Projection back to W
+            # Projection back to W (original space)
             self.W.append(
                 torch.from_numpy((U_@(A_.reshape(-1,time_length))).reshape(time_length,-1)).type(torch.get_default_dtype()))
             
@@ -99,7 +99,6 @@ class RawTrajectoryDataset(Dataset):
             self.state_dim = self.dim_galerkin
             self.control_dim = self.dim_galerkin
             self.output_dim = self.dim_galerkin
-            self.mask = output_mask[:self.dim_galerkin]
 
     @classmethod
     def generate(cls, generator, time_horizon, n_trajectories, n_samples,
@@ -148,33 +147,44 @@ class TrajectoryDataset(Dataset):
 
 
         init_state = []
+        init_a = [] # a(0)
         state = []
+        a = [] 
         rnn_input_data = []
+        rnn_input_data_projected = []
         seq_len_data = []
+        seq_len_data_projected = []
+
+        Phi = []
 
         rng = np.random.default_rng()
-
+        self.galerkin = raw_data.galerkin
         k_tr = 0
-        for (x0, x0_n, t, y, y_n, u,U,S,V,a_initial,A,u_proj,W) in raw_data:
-            if raw_data.galerkin:
-                y = A
-                x0 = a_initial
-                u = u_proj  
-            else:    
-                y += y_n
-                x0 += x0_n
+        for (x0, x0_n, t, y, y_n, u,phi,S,V,a_initial,A,u_proj,W) in raw_data:
+            y += y_n
+            x0 += x0_n
 
             if max_seq_len == -1:
-                for k_s, y_s in enumerate(y):
+                for k_s, (a_s, y_s) in enumerate(zip(A,y)):
                     rnn_input, rnn_input_len = self.process_example(
                         0, k_s, t, u, self.delta)
+                    rnn_input_projected, rnn_input_len_projected = self.process_example(
+                        0, k_s, t, u_proj, self.delta)
 
+                    mask_galerkin = mask[raw_data.dim_galerkin]
+                    a_ = a_s.view(1, -1)[:, mask_galerkin].reshape(-1)
                     s = y_s.view(1, -1)[:, mask].reshape(-1)
 
                     init_state.append(x0)
+                    init_a.append(a_initial)
                     state.append(s)
+                    a.append(a_)
                     seq_len_data.append(rnn_input_len)
+                    seq_len_data_projected.append(rnn_input_len_projected)
                     rnn_input_data.append(rnn_input)
+                    rnn_input_data_projected.append(rnn_input_projected)
+
+                    Phi.append(phi)
 
             else:
                 for k_s, y_s in enumerate(y):
@@ -201,12 +211,23 @@ class TrajectoryDataset(Dataset):
 
         self.init_state = torch.stack(init_state).type(
             torch.get_default_dtype())
+        self.init_a = torch.stack(init_a).type(
+            torch.get_default_dtype())
         self.state = torch.stack(state).type(torch.get_default_dtype())
+        self.a = torch.stack(a).type(torch.get_default_dtype())
         self.rnn_input = torch.stack(rnn_input_data).type(
             torch.get_default_dtype())
+        self.rnn_input_projected = torch.stack(rnn_input_data_projected).type(
+            torch.get_default_dtype())
         self.seq_lens = torch.tensor(seq_len_data, dtype=torch.long)
+        self.seq_lens_projected = torch.tensor(seq_len_data_projected, dtype=torch.long)
 
+        # basis vectors 
+        self.Phi = torch.stack(Phi).type(
+            torch.get_default_dtype())
+        
         self.len = len(init_state)
+        self.len_projected = len(init_a)
 
     @staticmethod
     def process_example(start_idx, end_idx, t, u, delta):
@@ -236,8 +257,11 @@ class TrajectoryDataset(Dataset):
         return rnn_input, u_sz
 
     def __len__(self):
-        return self.len
+        if self.galerkin:
+            return self.len_projected
+        else:
+            return self.len
 
     def __getitem__(self, index):
-        return (self.init_state[index], self.state[index],
-                self.rnn_input[index], self.seq_lens[index])
+        return (self.init_state[index], self.init_a[index],self.state[index],self.a[index],
+                self.rnn_input[index],self.rnn_input_projected[index], self.seq_lens[index],self.seq_lens_projected[index],self.Phi[index])
