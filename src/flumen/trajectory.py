@@ -170,8 +170,11 @@ class TrajectoryDataset(Dataset):
                         0, k_s, t, u, self.delta)
                     rnn_input_projected, rnn_input_len_projected = self.process_example(
                         0, k_s, t, u_proj, self.delta)
-
-                    mask_galerkin = mask[raw_data.dim_galerkin]
+                    
+                    ## if mask is shorter than raw_data.dim_galerkin
+                    if len(mask) <= raw_data.dim_galerkin:
+                        mask_ = mask + (True,) * int(raw_data.dim_galerkin - len(mask)+1) # create extras Trues
+                    mask_galerkin = mask_[raw_data.dim_galerkin]
                     a_ = a_s.view(1, -1)[:, mask_galerkin].reshape(-1)
                     s = y_s.view(1, -1)[:, mask].reshape(-1)
 
