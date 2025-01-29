@@ -28,6 +28,7 @@ def main():
     args = ap.parse_args()
 
     data = torch.load(args.load_path)
+ 
 
     if args.reset_noise:
         data.reset_state_noise(args.noise_std)
@@ -35,7 +36,7 @@ def main():
             data.generator.noise_std = args.noise_std
 
     experiment, train_args = prepare_experiment(data, args)
-    wandb.init(project='Flumen',name=args.experiment_id,config=args)
+    wandb.init(project='Flumen_galerkin',name=args.experiment_id,config=args)
     
     experiment.generator = data.generator
 

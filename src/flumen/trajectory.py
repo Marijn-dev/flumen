@@ -32,7 +32,15 @@ class RawTrajectoryDataset(Dataset):
         self.state = []
         self.state_noise = []
         self.control_seq = []
+        self.U = [] # left singular matrix 
+        self.S = [] # Singular values
+        self.V = [] # right singular matrix
+        self.a_initial = [] # a(0)
+        self.A = [] # time coefficients A = [a(0)...a(tend)] with a(0) = [a0(0)...aN(0)]
+        self.control_seq_projected = [] # control sequences projected with spatial modes
+        self.W = [] 
 
+        ## sample represents trajectory
         for k, sample in enumerate(data):
             self.init_state[k] = torch.from_numpy(sample["init_state"].reshape(
                 (1, self.state_dim)))
@@ -53,6 +61,38 @@ class RawTrajectoryDataset(Dataset):
             self.control_seq.append(
                 torch.from_numpy(sample["control"]).type(
                     torch.get_default_dtype()).reshape((-1, self.control_dim)))
+            
+            # Compute SVD (spatial modes)
+            state_space_time = sample["state"].reshape(self.state_dim,-1)
+            time_length = len(state_space_time[0])
+            U_, S_, V_ = np.linalg.svd(state_space_time,full_matrices=True)
+            
+            self.U.append(
+                torch.from_numpy(U_).type(torch.get_default_dtype()))
+            
+            self.S.append(
+                torch.from_numpy(S_).type(torch.get_default_dtype()))
+            
+            self.V.append(
+                torch.from_numpy(V_).type(torch.get_default_dtype()))
+            
+            # Compute projection (temporal coefficients)
+            A_ = np.transpose(U_) @ state_space_time
+            A_ = A_.reshape(time_length,-1) # reshape to time,space from space,time
+            self.a_initial.append(
+                torch.from_numpy(A_[0]).type(torch.get_default_dtype())) # A0
+            self.A.append(
+                torch.from_numpy(A_).type(torch.get_default_dtype()))
+            
+            # projection of input U
+            Br = np.transpose(U_) @ np.ones((state_dim,self.control_dim)) # mxr -> r x control dim
+            self.control_seq_projected.append(
+                torch.from_numpy(np.transpose(Br @ np.transpose(sample["control"]))).type(torch.get_default_dtype()))
+            
+            # Projection back to W
+            self.W.append(
+                torch.from_numpy((U_@(A_.reshape(-1,time_length))).reshape(time_length,-1)).type(torch.get_default_dtype()))
+        self.control_dim_galerkin = U_.shape[1] # amount of columns  
 
     @classmethod
     def generate(cls, generator, time_horizon, n_trajectories, n_samples,
@@ -77,12 +117,12 @@ class RawTrajectoryDataset(Dataset):
                    noise_std=noise_std)
 
     def __len__(self):
-        return (self.init_state)
+        return len(self.init_state)
 
     def __getitem__(self, index):
         return (self.init_state[index], self.init_state_noise[index],
                 self.time[index], self.state[index], self.state_noise[index],
-                self.control_seq[index])
+                self.control_seq[index],self.U[index],self.S[index],self.V[index],self.a_initial[index],self.A[index],self.control_seq_projected[index],self.W[index]) 
 
 
 class TrajectoryDataset(Dataset):
@@ -92,8 +132,15 @@ class TrajectoryDataset(Dataset):
                  max_seq_len=-1,
                  n_samples=1):
 
+        
+        galerkin = True
+        if galerkin:
+            self.control_dim = raw_data.control_dim_galerkin # Should be changed when taking truncated SVD
+
+        else:
+            self.control_dim = raw_data.control_dim
+
         self.state_dim = raw_data.state_dim
-        self.control_dim = raw_data.control_dim
         self.output_dim = raw_data.output_dim
         self.delta = raw_data.delta
 
@@ -108,9 +155,14 @@ class TrajectoryDataset(Dataset):
 
         k_tr = 0
 
-        for (x0, x0_n, t, y, y_n, u) in raw_data:
-            y += y_n
-            x0 += x0_n
+        for (x0, x0_n, t, y, y_n, u,U,S,V,a_initial,A,u_proj,W) in raw_data:
+            if galerkin:
+                y = A
+                x0 = a_initial
+                u = u_proj  
+            else:    
+                y += y_n
+                x0 += x0_n
 
             if max_seq_len == -1:
                 for k_s, y_s in enumerate(y):

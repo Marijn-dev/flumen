@@ -39,7 +39,7 @@ def prepare_experiment(data, args):
                             data.dims(), (train_mean, train_std, train_istd),
                             save_root=args.write_dir)
 
-    model: CausalFlowModelV2 = instantiate_model(args, train_data.state_dim,
+    model: CausalFlowModel = instantiate_model(args, train_data.state_dim,
                                                train_data.control_dim,
                                                train_data.output_dim)
 
