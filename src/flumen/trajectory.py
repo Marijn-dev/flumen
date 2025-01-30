@@ -167,9 +167,9 @@ class TrajectoryDataset(Dataset):
             #     x0 += x0_n
 
             if max_seq_len == -1:
-                for k_s, y_s,a_s in  enumerate(zip(y, A)):
+                for k_s, (y_s,a_s) in  enumerate(zip(y, A)):
                     rnn_input, rnn_input_len = self.process_example(
-                        0, k_s, t, u, self.delta)
+                        0, k_s, t, u_proj, self.delta)
 
                     s = y_s.view(1, -1)[:, mask].reshape(-1)
                     a = a_s.view(1, -1)[:, mask].reshape(-1)
