@@ -34,9 +34,8 @@ def prepare_experiment(data, args):
         train_mean = 0.
         train_std = np.eye(train_data.state_dim)
         train_istd = np.eye(train_data.state_dim)
-
     experiment = Experiment(args,
-                            data.dims(), (train_mean, train_std, train_istd),
+                            (100,100,100), (train_mean, train_std, train_istd), #### CHANGE dimensions
                             save_root=args.write_dir)
 
     model: CausalFlowModel = instantiate_model(args, train_data.state_dim,
