@@ -131,7 +131,7 @@ class FFNet(nn.Module):
                  in_size,
                  out_size,
                  hidden_size,
-                 activation=nn.Sigmoid,
+                 activation=nn.ReLU,
                  use_batch_norm=False):
         super(FFNet, self).__init__()
 
