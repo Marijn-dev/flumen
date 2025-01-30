@@ -152,7 +152,7 @@ class TrajectoryDataset(Dataset):
         an = []
         rnn_input_data = []
         seq_len_data = []
-
+        Phi = []
         rng = np.random.default_rng()
 
         k_tr = 0
@@ -180,7 +180,7 @@ class TrajectoryDataset(Dataset):
                     an.append(a)
                     seq_len_data.append(rnn_input_len)
                     rnn_input_data.append(rnn_input)
-
+                    Phi.append(U)
             else:
                 for k_s, y_s in enumerate(y):
                     # find index of last relevant state sample
@@ -210,7 +210,7 @@ class TrajectoryDataset(Dataset):
             torch.get_default_dtype())
         self.state = torch.stack(state).type(torch.get_default_dtype())
         self.an = torch.stack(an).type(torch.get_default_dtype())
-
+        self.Phi = torch.stack(Phi).type(torch.get_default_dtype())
         self.rnn_input = torch.stack(rnn_input_data).type(
             torch.get_default_dtype())
         self.seq_lens = torch.tensor(seq_len_data, dtype=torch.long)
@@ -249,4 +249,4 @@ class TrajectoryDataset(Dataset):
 
     def __getitem__(self, index):
         return (self.init_state[index],self.init_a[index], self.state[index],self.an[index],
-                self.rnn_input[index], self.seq_lens[index])
+                self.rnn_input[index], self.seq_lens[index],self.Phi[index])

@@ -3,7 +3,7 @@ import time
 from .experiment import Experiment
 import wandb 
 
-def prep_inputs(x0, a0,y,a, u, lengths, device):
+def prep_inputs(x0, a0,y,a, u, lengths,Phi, device):
     sort_idxs = torch.argsort(lengths, descending=True)
 
     x0 = a0[sort_idxs]
