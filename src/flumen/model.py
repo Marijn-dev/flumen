@@ -131,7 +131,7 @@ class FFNet(nn.Module):
                  in_size,
                  out_size,
                  hidden_size,
-                 activation=nn.ReLU,
+                 activation=nn.Sigmoid,
                  use_batch_norm=False):
         super(FFNet, self).__init__()
 
@@ -144,7 +144,7 @@ class FFNet(nn.Module):
         if use_batch_norm:
             self.layers.append(nn.BatchNorm1d(hidden_size[0]))
 
-        # self.layers.append(activation())
+        self.layers.append(activation())
 
         for isz, osz in zip(hidden_size[:-1], hidden_size[1:]):
             self.layers.append(nn.Linear(isz, osz))
@@ -152,7 +152,7 @@ class FFNet(nn.Module):
             if use_batch_norm:
                 self.layers.append(nn.BatchNorm1d(osz))
 
-            # self.layers.append(activation())
+            self.layers.append(activation())
 
         self.layers.append(nn.Linear(hidden_size[-1], out_size))
 
