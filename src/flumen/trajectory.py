@@ -147,7 +147,9 @@ class TrajectoryDataset(Dataset):
         mask = tuple(bool(v) for v in raw_data.mask)
 
         init_state = []
+        init_a = []
         state = []
+        an = []
         rnn_input_data = []
         seq_len_data = []
 
@@ -155,24 +157,27 @@ class TrajectoryDataset(Dataset):
 
         k_tr = 0
 
-        for (x0, x0_n, t, y, y_n, u,U,S,V,a_initial,A,u_proj,W) in raw_data:
-            if galerkin:
-                y = A
-                x0 = a_initial
-                u = u_proj  
-            else:    
-                y += y_n
-                x0 += x0_n
+        for (x0, x0_n, t, y, y_n, u,U,S,V,a0,A,u_proj,W) in raw_data:
+            # if galerkin:
+            #     y = A
+            #     x0 = a_initial
+            #     u = u_proj  
+            # else:    
+            #     y += y_n
+            #     x0 += x0_n
 
             if max_seq_len == -1:
-                for k_s, y_s in enumerate(y):
+                for k_s, y_s,a_s in  enumerate(zip(y, A)):
                     rnn_input, rnn_input_len = self.process_example(
                         0, k_s, t, u, self.delta)
 
                     s = y_s.view(1, -1)[:, mask].reshape(-1)
+                    a = a_s.view(1, -1)[:, mask].reshape(-1)
 
                     init_state.append(x0)
+                    init_a.append(a0)
                     state.append(s)
+                    an.append(a)
                     seq_len_data.append(rnn_input_len)
                     rnn_input_data.append(rnn_input)
 
@@ -201,7 +206,11 @@ class TrajectoryDataset(Dataset):
 
         self.init_state = torch.stack(init_state).type(
             torch.get_default_dtype())
+        self.init_a = torch.stack(init_a).type(
+            torch.get_default_dtype())
         self.state = torch.stack(state).type(torch.get_default_dtype())
+        self.an = torch.stack(an).type(torch.get_default_dtype())
+
         self.rnn_input = torch.stack(rnn_input_data).type(
             torch.get_default_dtype())
         self.seq_lens = torch.tensor(seq_len_data, dtype=torch.long)
@@ -239,5 +248,5 @@ class TrajectoryDataset(Dataset):
         return self.len
 
     def __getitem__(self, index):
-        return (self.init_state[index], self.state[index],
+        return (self.init_state[index],self.init_a[index], self.state[index],self.an[index],
                 self.rnn_input[index], self.seq_lens[index])
