@@ -14,7 +14,7 @@ class CausalFlowModel(nn.Module):
                  encoder_depth,
                  decoder_size,
                  decoder_depth,
-                 use_batch_norm=False):
+                 use_batch_norm=True):
         super(CausalFlowModel, self).__init__()
 
         self.state_dim = state_dim
@@ -131,8 +131,8 @@ class FFNet(nn.Module):
                  in_size,
                  out_size,
                  hidden_size,
-                 activation=nn.ReLU,
-                 use_batch_norm=False):
+                 activation=nn.Tanh,
+                 use_batch_norm=True):
         super(FFNet, self).__init__()
 
         self.in_size = in_size
