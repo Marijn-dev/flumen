@@ -63,8 +63,8 @@ class RawTrajectoryDataset(Dataset):
                     torch.get_default_dtype()).reshape((-1, self.control_dim)))
             
             # Compute SVD (spatial modes)
-            state_space_time = sample["state"].reshape(self.state_dim,-1)
-            time_length = len(state_space_time[0])
+            state_space_time = np.transpose(sample["state"]) # (time,space) -> (space,time) use tranpose, DONT use reshape!
+
             U_, S_, V_ = np.linalg.svd(state_space_time,full_matrices=True)
             
             self.U.append(
@@ -78,11 +78,11 @@ class RawTrajectoryDataset(Dataset):
             
             # Compute projection (temporal coefficients)
             A_ = np.transpose(U_) @ state_space_time
-            A_ = A_.reshape(time_length,-1) # reshape to time,space from space,time
+            A_re = np.transpose(A_) # (space,time) -> (time,space)
             self.a_initial.append(
-                torch.from_numpy(A_[0]).type(torch.get_default_dtype())) # A0
+                torch.from_numpy(A_re[0]).type(torch.get_default_dtype())) # A0
             self.A.append(
-                torch.from_numpy(A_).type(torch.get_default_dtype()))
+                torch.from_numpy(A_re).type(torch.get_default_dtype()))
             
             # projection of input U
             Br = np.transpose(U_) @ np.ones((state_dim,self.control_dim)) # mxr -> r x control dim
@@ -90,10 +90,12 @@ class RawTrajectoryDataset(Dataset):
                 torch.from_numpy(np.transpose(Br @ np.transpose(sample["control"]))).type(torch.get_default_dtype()))
             
             # Projection back to W
+            W_ = U_@A_
+            W_ = np.transpose(W_) # (space,time) -> (time,space)
             self.W.append(
-                torch.from_numpy((U_@(A_.reshape(-1,time_length))).reshape(time_length,-1)).type(torch.get_default_dtype()))
-        self.control_dim_galerkin = U_.shape[1] # amount of columns  
+                torch.from_numpy(W_).type(torch.get_default_dtype()))
 
+        self.control_dim_galerkin = U_.shape[1] # amount of columns  
     @classmethod
     def generate(cls, generator, time_horizon, n_trajectories, n_samples,
                  noise_std):
@@ -153,6 +155,7 @@ class TrajectoryDataset(Dataset):
         rnn_input_data = []
         seq_len_data = []
         Phi = []
+        time = []
         rng = np.random.default_rng()
 
         k_tr = 0
@@ -167,7 +170,7 @@ class TrajectoryDataset(Dataset):
             #     x0 += x0_n
 
             if max_seq_len == -1:
-                for k_s, (y_s,a_s) in  enumerate(zip(y, A)):
+                for k_s, (y_s,a_s,t_s) in  enumerate(zip(y, A,t)):
                     rnn_input, rnn_input_len = self.process_example(
                         0, k_s, t, u_proj, self.delta)
 
@@ -181,6 +184,7 @@ class TrajectoryDataset(Dataset):
                     seq_len_data.append(rnn_input_len)
                     rnn_input_data.append(rnn_input)
                     Phi.append(U)
+                    time.append(t_s)
             else:
                 for k_s, y_s in enumerate(y):
                     # find index of last relevant state sample
@@ -209,6 +213,7 @@ class TrajectoryDataset(Dataset):
         self.init_a = torch.stack(init_a).type(
             torch.get_default_dtype())
         self.state = torch.stack(state).type(torch.get_default_dtype())
+        self.time = torch.stack(time).type(torch.get_default_dtype())
         self.an = torch.stack(an).type(torch.get_default_dtype())
         self.Phi = torch.stack(Phi).type(torch.get_default_dtype())
         self.rnn_input = torch.stack(rnn_input_data).type(
@@ -249,4 +254,4 @@ class TrajectoryDataset(Dataset):
 
     def __getitem__(self, index):
         return (self.init_state[index],self.init_a[index], self.state[index],self.an[index],
-                self.rnn_input[index], self.seq_lens[index],self.Phi[index])
+                self.rnn_input[index], self.seq_lens[index],self.Phi[index],self.time[index])

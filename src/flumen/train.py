@@ -3,11 +3,11 @@ import time
 from .experiment import Experiment
 import wandb 
 
-def prep_inputs(x0, a0,y,a, u, lengths,Phi, device):
+def prep_inputs(x0, a0,y,a, u, lengths,Phi,time, device):
     sort_idxs = torch.argsort(lengths, descending=True)
 
-    x0 = a0[sort_idxs]
-    y = a[sort_idxs]
+    a0 = a0[sort_idxs]
+    a = a[sort_idxs]
     u = u[sort_idxs]
     lengths = lengths[sort_idxs]
 
@@ -18,12 +18,12 @@ def prep_inputs(x0, a0,y,a, u, lengths,Phi, device):
                                                 batch_first=True,
                                                 enforce_sorted=True)
 
-    x0 = x0.to(device)
-    y = y.to(device)
+    a0 = a0.to(device)
+    a = a.to(device)
     u = u.to(device)
     deltas = deltas.to(device)
 
-    return x0, y, u, deltas
+    return a0, a, u, deltas
 
 
 def validate(data, loss_fn, model, device):
