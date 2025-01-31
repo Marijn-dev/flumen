@@ -135,8 +135,8 @@ class TrajectoryDataset(Dataset):
                  n_samples=1):
 
         
-        galerkin = True
-        if galerkin:
+        galerkin_input = False
+        if galerkin_input:
             self.control_dim = raw_data.control_dim_galerkin # Should be changed when taking truncated SVD
 
         else:
@@ -172,7 +172,7 @@ class TrajectoryDataset(Dataset):
             if max_seq_len == -1:
                 for k_s, (y_s,a_s,t_s) in  enumerate(zip(y, A,t)):
                     rnn_input, rnn_input_len = self.process_example(
-                        0, k_s, t, u_proj, self.delta)
+                        0, k_s, t, u, self.delta)
 
                     s = y_s.view(1, -1)[:, mask].reshape(-1)
                     a = a_s.view(1, -1)[:, mask].reshape(-1)
