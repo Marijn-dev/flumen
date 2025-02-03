@@ -10,7 +10,8 @@ def prep_inputs(x0, a0,y,a, u, lengths,Phi,time, device):
     a = a[sort_idxs]
     u = u[sort_idxs]
     lengths = lengths[sort_idxs]
-
+    y
+    
     deltas = u[:, :lengths[0], -1].unsqueeze(-1)
 
     u = torch.nn.utils.rnn.pack_padded_sequence(u,
@@ -25,18 +26,54 @@ def prep_inputs(x0, a0,y,a, u, lengths,Phi,time, device):
 
     return a0, a, u, deltas
 
+def prep_inputs_(x0,a0, y,a, u, lengths,PHI,time, device):
+    sort_idxs = torch.argsort(lengths, descending=True)
+
+    a0 = a0[sort_idxs]
+    a = a[sort_idxs]
+    u = u[sort_idxs]
+    y = y[sort_idxs]
+    lengths = lengths[sort_idxs]
+    PHI = PHI[sort_idxs]
+    deltas = u[:, :lengths[0], -1].unsqueeze(-1)
+    time = time[sort_idxs]
+
+    u = torch.nn.utils.rnn.pack_padded_sequence(u,
+                                                lengths,
+                                                batch_first=True,
+                                                enforce_sorted=True)
+
+    a0 = a0.to(device)
+    a = a.to(device)
+    y = y.to(device)
+    u = u.to(device)
+    deltas = deltas.to(device)
+    PHI = PHI.to(device)
+    time = time.to(device)
+
+    return a0, a, u, deltas, y,PHI,time
+
 
 def validate(data, loss_fn, model, device):
-    vl = 0.
+    vl_inner = 0.
+    vl_outer = 0.
 
     with torch.no_grad():
         for example in data:
-            x0, y, u, deltas = prep_inputs(*example, device)
+            a0, a, u, deltas,y,PHI_true,time = prep_inputs_(*example, device)
 
-            y_pred = model(x0, u, deltas)
-            vl += loss_fn(y, y_pred).item()
+            a_pred = model(a0, u, deltas)
+            vl_inner += loss_fn(a, a_pred).item()
 
-    return model.state_dim * vl / len(data)
+            # y_true = PHI_true[0] @ a[0]
+            # y_true = y_true.view(1,100)
+                
+            y_pred = PHI_true[0] @ a_pred[0]
+            y_pred = y_pred.view(1,100)
+
+            vl_outer += loss_fn(y, y_pred).item()
+
+    return model.state_dim * vl_inner / len(data), model.state_dim * vl_outer
 
 
 def train_step(example, loss_fn, model, optimizer, device):
@@ -94,20 +131,24 @@ def train(experiment: Experiment, model, loss_fn, optimizer, sched,
     print('=' * len(header_msg))
     # Evaluate initial loss
     model.eval()
-    train_loss = validate(train_dl, loss_fn, model, device)
-    val_loss = validate(val_dl, loss_fn, model, device)
-    test_loss = validate(test_dl, loss_fn, model, device)
+    train_loss_inner, train_loss_outer = validate(train_dl, loss_fn, model, device)
+    val_loss_inner, val_loss_outer = validate(val_dl, loss_fn, model, device)
+    test_loss_inner, test_loss_outer = validate(test_dl, loss_fn, model, device)
 
-    wandb.log({"train/loss": train_loss,
-                  "val/loss": val_loss,
-                  "test/loss": test_loss}, step=0)
+    wandb.log({"inner/train_loss": train_loss_inner,
+                  "inner/val_loss": val_loss_inner,
+                  "inner/test_loss": test_loss_inner}, step=0)
     
-    early_stop.step(val_loss)
-    experiment.register_progress(train_loss, val_loss, test_loss,
+    wandb.log({"outer/train_loss": train_loss_outer,
+                  "outer/val_loss": val_loss_outer,
+                  "outer/test_loss": test_loss_outer}, step=0)
+    
+    early_stop.step(val_loss_inner)
+    experiment.register_progress(train_loss_inner, val_loss_inner, test_loss_inner,
                                  early_stop.best_model)
     print(
-        f"{0:>5d} :: {train_loss:>16e} :: {val_loss:>16e} :: " \
-        f"{test_loss:>16e} :: {early_stop.best_val_loss:>16e}"
+        f"{0:>5d} :: {train_loss_inner:>16e} :: {val_loss_inner:>16e} :: " \
+        f"{test_loss_inner:>16e} :: {early_stop.best_val_loss_inner:>16e}"
     )
 
     start = time.time()
@@ -118,29 +159,31 @@ def train(experiment: Experiment, model, loss_fn, optimizer, sched,
             train_step(example, loss_fn, model, optimizer, device)
 
         model.eval()
-        train_loss = validate(train_dl, loss_fn, model, device)
-        val_loss = validate(val_dl, loss_fn, model, device)
-        test_loss = validate(test_dl, loss_fn, model, device)
+        train_loss_inner, train_loss_outer = validate(train_dl, loss_fn, model, device)
+        val_loss_inner, val_loss_outer = validate(val_dl, loss_fn, model, device)
+        test_loss_inner, test_loss_outer = validate(test_dl, loss_fn, model, device)
 
-        sched.step(val_loss)
-        early_stop.step(val_loss)
+        sched.step(val_loss_inner)
+        early_stop.step(val_loss_inner)
 
         print(
-            f"{epoch + 1:>5d} :: {train_loss:>16e} :: {val_loss:>16e} :: " \
-            f"{test_loss:>16e} :: {early_stop.best_val_loss:>16e}"
+            f"{epoch + 1:>5d} :: {train_loss_inner:>16e} :: {val_loss_inner:>16e} :: " \
+            f"{test_loss_inner:>16e} :: {early_stop.best_val_loss:>16e}"
         )
 
-        # log results of epoch to wandb
-        wandb.log({"train/loss": train_loss,
-                  "val/loss": val_loss,
-                  "test/loss": test_loss,
-                  "best/val loss":early_stop.best_val_loss},step=epoch + 1)
-
+        wandb.log({"inner/train_loss": train_loss_inner,
+                  "inner/val_loss": val_loss_inner,
+                  "inner/test_loss": test_loss_inner,
+                  "inner/best_val_loss":early_stop.best_val_loss}, step=epoch+1)
+         
+        wandb.log({"outer/train_loss": train_loss_outer,
+                  "outer/val_loss": val_loss_outer,
+                  "outer/test_loss": test_loss_outer}, step=epoch+1)
 
         if early_stop.best_model:
             experiment.save_model(model)
 
-        experiment.register_progress(train_loss, val_loss, test_loss,
+        experiment.register_progress(train_loss_inner, val_loss_inner, test_loss_inner,
                                      early_stop.best_model)
 
         if early_stop.early_stop:
@@ -149,6 +192,6 @@ def train(experiment: Experiment, model, loss_fn, optimizer, sched,
     train_time = time.time() - start
     experiment.save(train_time)
 
-    wandb.summary["test loss"] = test_loss
+    wandb.summary["test loss"] = test_loss_inner
     wandb.summary["train time"] = train_time
     return train_time
