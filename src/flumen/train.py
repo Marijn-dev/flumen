@@ -148,7 +148,7 @@ def train(experiment: Experiment, model, loss_fn, optimizer, sched,
                                  early_stop.best_model)
     print(
         f"{0:>5d} :: {train_loss_inner:>16e} :: {val_loss_inner:>16e} :: " \
-        f"{test_loss_inner:>16e} :: {early_stop.best_val_loss_inner:>16e}"
+        f"{test_loss_inner:>16e} :: {early_stop.best_val_loss:>16e}"
     )
 
     start = time.time()
