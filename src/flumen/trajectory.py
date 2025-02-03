@@ -65,7 +65,9 @@ class RawTrajectoryDataset(Dataset):
             # Compute SVD (spatial modes)
             state_space_time = np.transpose(sample["state"]) # (time,space) -> (space,time) use tranpose, DONT use reshape!
 
-            U_, S_, V_ = np.linalg.svd(state_space_time,full_matrices=True)
+            U_, S_, V_ = np.linalg.svd(state_space_time,full_matrices=False)
+            R = 20
+            U_ = U_[:,:R] # take first R rows
             
             self.U.append(
                 torch.from_numpy(U_).type(torch.get_default_dtype()))
@@ -135,15 +137,17 @@ class TrajectoryDataset(Dataset):
                  n_samples=1):
 
         
-        galerkin_input = False
+        galerkin_input = True
         if galerkin_input:
-            self.control_dim = raw_data.control_dim_galerkin # Should be changed when taking truncated SVD
+            self.control_dim = raw_data.control_dim_galerkin, # Should be changed when taking truncated SVD
+            self.state_dim = raw_data.control_dim_galerkin
+            self.output_dim = raw_data.control_dim_galerkin
 
         else:
             self.control_dim = raw_data.control_dim
+            self.state_dim = raw_data.state_dim
+            self.output_dim = raw_data.output_dim
 
-        self.state_dim = raw_data.state_dim
-        self.output_dim = raw_data.output_dim
         self.delta = raw_data.delta
 
         mask = tuple(bool(v) for v in raw_data.mask)
@@ -172,10 +176,11 @@ class TrajectoryDataset(Dataset):
             if max_seq_len == -1:
                 for k_s, (y_s,a_s,t_s) in  enumerate(zip(y, A,t)):
                     rnn_input, rnn_input_len = self.process_example(
-                        0, k_s, t, u, self.delta)
+                        0, k_s, t, u_proj, self.delta)
 
+                    mask_galerkin = mask[:raw_data.control_dim_galerkin]
                     s = y_s.view(1, -1)[:, mask].reshape(-1)
-                    a = a_s.view(1, -1)[:, mask].reshape(-1)
+                    a = a_s.view(1, -1)[:, mask_galerkin].reshape(-1)
 
                     init_state.append(x0)
                     init_a.append(a0)
