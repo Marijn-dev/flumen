@@ -65,11 +65,8 @@ def validate(data, loss_fn, model, device):
             a_pred = model(a0, u, deltas)
             vl_inner += loss_fn(a, a_pred).item()
 
-            # y_true = PHI_true[0] @ a[0]
-            # y_true = y_true.view(1,100)
-                
-            y_pred = PHI_true[0] @ a_pred[0]
-            y_pred = y_pred.view(1,100)
+            y_pred = torch.bmm(PHI_true, a_pred.unsqueeze(-1)).squeeze(-1)  # Result: (batch_size, 100)
+            y_pred = y_pred.view(-1,100)
 
             vl_outer += loss_fn(y, y_pred).item()
 
