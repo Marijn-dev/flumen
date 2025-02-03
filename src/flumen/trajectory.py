@@ -139,7 +139,7 @@ class TrajectoryDataset(Dataset):
         
         galerkin_input = True
         if galerkin_input:
-            self.control_dim = raw_data.control_dim_galerkin, # Should be changed when taking truncated SVD
+            self.control_dim = raw_data.control_dim_galerkin # Should be changed when taking truncated SVD
             self.state_dim = raw_data.control_dim_galerkin
             self.output_dim = raw_data.control_dim_galerkin
 
