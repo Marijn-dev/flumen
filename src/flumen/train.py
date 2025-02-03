@@ -73,7 +73,7 @@ def validate(data, loss_fn, model, device):
 
             vl_outer += loss_fn(y, y_pred).item()
 
-    return model.state_dim * vl_inner / len(data), model.state_dim * vl_outer
+    return model.state_dim * vl_inner / len(data), model.state_dim * vl_outer / len(data)
 
 
 def train_step(example, loss_fn, model, optimizer, device):
