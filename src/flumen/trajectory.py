@@ -108,6 +108,7 @@ class RawTrajectoryDataset(Dataset):
                 torch.from_numpy(W_).type(torch.get_default_dtype()))
 
         self.control_dim_galerkin = U_projected.shape[1] # amount of columns  
+        self.output_dim_galerkin = U_.shape[1] # amount of columns  
     @classmethod
     def generate(cls, generator, time_horizon, n_trajectories, n_samples,
                  noise_std):
@@ -150,8 +151,8 @@ class TrajectoryDataset(Dataset):
         galerkin_input = True
         if galerkin_input:
             self.control_dim = raw_data.control_dim_galerkin # Should be changed when taking truncated SVD
-            self.state_dim = raw_data.control_dim_galerkin
-            self.output_dim = raw_data.control_dim_galerkin
+            self.state_dim = raw_data.output_dim_galerkin
+            self.output_dim = raw_data.output_dim_galerkin
 
         else:
             self.control_dim = raw_data.control_dim
