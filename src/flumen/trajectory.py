@@ -87,8 +87,13 @@ class RawTrajectoryDataset(Dataset):
                 torch.from_numpy(A_re).type(torch.get_default_dtype()))
             
             # projection of input U
-            phi_0 = U_[0,:].reshape(1,-1) # first row
-            U_projected = sample["control"] @ phi_0             
+            # phi_0 = U_[0,:].reshape(1,-1) # first row
+            # U_projected = sample["control"] @ phi_0             
+
+            input_space_time = np.transpose(sample["control"])
+            U_input, S_input, V_input = np.linalg.svd(input_space_time,full_matrices=True)
+            U_projected = sample["control"] @ U_input
+
             # Br = np.transpose(U_) @ np.ones((state_dim,self.control_dim)) # mxr -> r x control dim
             # self.control_seq_projected.append(
                 # torch.from_numpy(np.transpose(Br @ np.transpose(sample["control"]))).type(torch.get_default_dtype()))
@@ -102,7 +107,7 @@ class RawTrajectoryDataset(Dataset):
             self.W.append(
                 torch.from_numpy(W_).type(torch.get_default_dtype()))
 
-        self.control_dim_galerkin = U_.shape[1] # amount of columns  
+        self.control_dim_galerkin = U_projected.shape[1] # amount of columns  
     @classmethod
     def generate(cls, generator, time_horizon, n_trajectories, n_samples,
                  noise_std):
