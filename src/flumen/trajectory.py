@@ -66,7 +66,7 @@ class RawTrajectoryDataset(Dataset):
             state_space_time = np.transpose(sample["state"]) # (time,space) -> (space,time) use tranpose, DONT use reshape!
 
             U_, S_, V_ = np.linalg.svd(state_space_time,full_matrices=False)
-            R = 20
+            R = 100
             U_ = U_[:,:R] # take first R columns
             
             self.U.append(
@@ -189,7 +189,7 @@ class TrajectoryDataset(Dataset):
                     rnn_input, rnn_input_len = self.process_example(
                         0, k_s, t, u_proj, self.delta)
 
-                    mask_galerkin = mask[:raw_data.control_dim_galerkin]
+                    mask_galerkin = mask[:raw_data.output_dim_galerkin]
                     s = y_s.view(1, -1)[:, mask].reshape(-1)
                     a = a_s.view(1, -1)[:, mask_galerkin].reshape(-1)
 
