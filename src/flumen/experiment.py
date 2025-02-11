@@ -24,7 +24,7 @@ def save_path(root, dir, timestamp, train_id):
 
 
 def instantiate_model(args, state_dim, control_dim, output_dim):
-    return CausalFlowModelV2(state_dim=state_dim,
+    return CausalFlowModel(state_dim=state_dim,
                            control_dim=control_dim,
                            output_dim=output_dim,
                            control_rnn_size=args.control_rnn_size,

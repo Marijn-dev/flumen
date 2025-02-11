@@ -19,7 +19,7 @@ class RawTrajectoryDataset(Dataset):
         n_traj = len(data)
         self.state_dim = state_dim
         self.control_dim = control_dim
-        self.output_dim = output_dim
+        self.output_dim = 100
         self.delta = delta
         self.mask = output_mask
 
@@ -33,7 +33,11 @@ class RawTrajectoryDataset(Dataset):
         self.state_noise = []
         self.control_seq = []
 
+        # location of the output, the road is L long and divided in to state_dim segments, input is the boundary location x = 0
+        
+        
         for k, sample in enumerate(data):
+
             self.init_state[k] = torch.from_numpy(sample["init_state"].reshape(
                 (1, self.state_dim)))
             self.init_state_noise[k] = 0.
@@ -44,6 +48,7 @@ class RawTrajectoryDataset(Dataset):
             self.state.append(
                 torch.from_numpy(sample["state"]).type(
                     torch.get_default_dtype()).reshape((-1, self.state_dim)))
+  
 
             self.state_noise.append(
                 torch.normal(mean=0.,
@@ -81,7 +86,7 @@ class RawTrajectoryDataset(Dataset):
 
     def __getitem__(self, index):
         return (self.init_state[index], self.init_state_noise[index],
-                self.time[index], self.state[index], self.state_noise[index],
+                self.time[index], self.state[index],self.state_noise[index],
                 self.control_seq[index])
 
 
@@ -108,7 +113,7 @@ class TrajectoryDataset(Dataset):
 
         k_tr = 0
 
-        for (x0, x0_n, t, y, y_n, u) in raw_data:
+        for (x0, x0_n, t, y, y_n,u) in raw_data:
             y += y_n
             x0 += x0_n
 

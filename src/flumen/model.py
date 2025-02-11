@@ -19,7 +19,9 @@ class CausalFlowModel(nn.Module):
 
         self.state_dim = state_dim
         self.control_dim = control_dim
-        self.output_dim = output_dim
+        # self.output_dim = output_dim
+        R = 50
+        self.output_dim = R
 
         self.control_rnn_size = control_rnn_size
 
@@ -42,12 +44,23 @@ class CausalFlowModel(nn.Module):
 
         u_dnn_isz = control_rnn_size
         self.u_dnn = FFNet(in_size=u_dnn_isz,
-                           out_size=output_dim,
+                           out_size=R,
                            hidden_size=decoder_depth *
                            (decoder_size * u_dnn_isz, ),
                            use_batch_norm=use_batch_norm)
+        
+        ### Trunk net used to encode locations and find phi(x), takes as as input a location x
+        self.trunk = Trunk(in_size=1,
+                           out_size=R,
+                           hidden_size=encoder_depth *
+                           (encoder_size * x_dnn_osz, ), # hidden size is equal encoder depth (encoder_size*x_dnn_osz)
+                        # if encoder depth = 2 -> (encoder_size*x_dnn_osz, encoder_size*x_dnn_osz)
+                           use_batch_norm=use_batch_norm)
+        
+        self.bias = nn.Parameter(torch.zeros(1, output_dim))  # Shape: [1, num_locations]
 
-    def forward(self, x, rnn_input, deltas):
+
+    def forward(self, x, rnn_input, deltas,X_loc):
         h0 = self.x_dnn(x)
         h0 = torch.stack(h0.split(self.control_rnn_size, dim=1))
         c0 = torch.zeros_like(h0)
@@ -60,9 +73,14 @@ class CausalFlowModel(nn.Module):
         h_shift[:, 0, :] = h0[-1]
 
         encoded_controls = (1 - deltas) * h_shift + deltas * h
-        output = self.u_dnn(encoded_controls[range(encoded_controls.shape[0]),
+        X_func = self.u_dnn(encoded_controls[range(encoded_controls.shape[0]),
                                              h_lens - 1, :])
+        
+        X_loc = self.trunk(X_loc)
 
+        output = torch.einsum("BR, LR -> BL", X_func, X_loc)  # B = Batch , R = Output features R, L is locations
+        output += self.bias
+        
         return output
 
 class CausalFlowModelV2(nn.Module):
@@ -124,7 +142,43 @@ class CausalFlowModelV2(nn.Module):
         output = self.decoder(encoded_controls[range(encoded_controls.shape[0]),
                                              h_lens - 1, :])
         return output
+    
+class Trunk(nn.Module):
 
+    def __init__(self,
+                 in_size,
+                 out_size,
+                 hidden_size,
+                 activation=nn.ReLU,
+                 use_batch_norm=False):
+        super(Trunk, self).__init__()
+
+        self.in_size = in_size
+        self.out_size = out_size
+
+        self.layers = nn.ModuleList()
+        self.layers.append(nn.Linear(in_size, hidden_size[0]))
+
+        if use_batch_norm:
+            self.layers.append(nn.BatchNorm1d(hidden_size[0]))
+
+        self.layers.append(activation())
+
+        for isz, osz in zip(hidden_size[:-1], hidden_size[1:]):
+            self.layers.append(nn.Linear(isz, osz))
+
+            if use_batch_norm:
+                self.layers.append(nn.BatchNorm1d(osz))
+
+            self.layers.append(activation())
+
+        self.layers.append(nn.Linear(hidden_size[-1], out_size))
+
+    def forward(self, input):
+        for layer in self.layers:
+            input = layer(input)
+        return input
+    
 class FFNet(nn.Module):
 
     def __init__(self,
