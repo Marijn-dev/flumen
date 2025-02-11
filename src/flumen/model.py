@@ -20,7 +20,7 @@ class CausalFlowModel(nn.Module):
         self.state_dim = state_dim
         self.control_dim = control_dim
         # self.output_dim = output_dim
-        R = 50
+        R = 16
         self.output_dim = R
 
         self.control_rnn_size = control_rnn_size
