@@ -12,7 +12,7 @@ def prep_inputs(x0, y,u, lengths, device):
     y = y[sort_idxs]
     u = u[sort_idxs]
     lengths = lengths[sort_idxs]
-    road_length = 1000
+    road_length = 100
     step = road_length / y.shape[1]
 
     locations = np.arange(start=step,stop=road_length+step,step=step) # shape y.shape[1]
@@ -37,7 +37,7 @@ def prep_inputs(x0, y,u, lengths, device):
 
 def validate(data, loss_fn, model, device):
     vl = 0.
-    
+
     with torch.no_grad():
         for example in data:
                 x0, y,u, deltas,locations = prep_inputs(*example, device)
