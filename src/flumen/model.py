@@ -20,7 +20,7 @@ class CausalFlowModel(nn.Module):
         self.state_dim = state_dim
         self.control_dim = control_dim
         # self.output_dim = output_dim
-        R = 16
+        R = 24
         self.output_dim = R
 
         self.control_rnn_size = control_rnn_size
@@ -80,7 +80,7 @@ class CausalFlowModel(nn.Module):
         X_loc = self.trunk(X_loc)
 
         output = torch.einsum("BR, LR -> BL", X_func, X_loc)  # B = Batch , R = Output features R, L is locations
-        # output += self.bias
+        output += self.bias
         
         return output
 
