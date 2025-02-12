@@ -80,7 +80,7 @@ class CausalFlowModel(nn.Module):
         X_loc = self.trunk(X_loc)
 
         output = torch.einsum("BR, LR -> BL", X_func, X_loc)  # B = Batch , R = Output features R, L is locations
-        output += self.bias
+        # output += self.bias
         
         return output
 
