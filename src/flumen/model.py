@@ -20,11 +20,11 @@ class CausalFlowModel(nn.Module):
         self.state_dim = state_dim
         self.control_dim = control_dim
         # self.output_dim = output_dim
-        self.modes = 50
+        self.modes = 16
         self.output_dim = self.modes
         self.trunk_modes = 16
         self.control_rnn_size = control_rnn_size
-        self.trunk_enabled = False
+        self.trunk_enabled = True
 
         x_dnn_osz = control_rnn_depth * control_rnn_size
         if self.trunk_enabled:
