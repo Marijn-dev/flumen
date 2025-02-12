@@ -20,20 +20,32 @@ class CausalFlowModel(nn.Module):
         self.state_dim = state_dim
         self.control_dim = control_dim
         # self.output_dim = output_dim
-        self.modes = 10
+        self.modes = 50
         self.output_dim = self.modes
         self.trunk_modes = 16
         self.control_rnn_size = control_rnn_size
+        self.trunk_enabled = False
 
         x_dnn_osz = control_rnn_depth * control_rnn_size
-        self.trunk = Trunk(in_size=1,
-                           out_size=self.trunk_modes,
-                           hidden_size=encoder_depth *
-                           (encoder_size * x_dnn_osz, ), # hidden size is equal encoder depth (encoder_size*x_dnn_osz)
-                        # if encoder depth = 2 -> (encoder_size*x_dnn_osz, encoder_size*x_dnn_osz)
-                           use_batch_norm=use_batch_norm)
-        
-        # self.trunk = None
+        if self.trunk_enabled:
+            out_size_flow = self.modes+self.trunk_modes
+            self.trunk = Trunk(in_size=1,
+                                out_size=self.trunk_modes,
+                                hidden_size=encoder_depth *
+                                (encoder_size * x_dnn_osz, ), # hidden size is equal encoder depth (encoder_size*x_dnn_osz)
+                            # if encoder depth = 2 -> (encoder_size*x_dnn_osz, encoder_size*x_dnn_osz)
+                                use_batch_norm=use_batch_norm)
+        else:
+            self.trunk = None
+            out_size_flow = self.modes
+
+        # project the inputs to the flow model 
+        self.projection = True
+        if self.projection:
+            in_size_flow = self.modes
+        else:
+            in_size_flow = state_dim
+
 
         self.u_rnn = torch.nn.LSTM(
             input_size=1 + control_dim,
@@ -43,28 +55,19 @@ class CausalFlowModel(nn.Module):
             dropout=0,
         )
 
-
-        self.x_dnn = FFNet(in_size=state_dim,
-                           out_size=x_dnn_osz,
-                           hidden_size=encoder_depth *
-                           (encoder_size * x_dnn_osz, ), # hidden size is equal encoder depth (encoder_size*x_dnn_osz)
+        self.x_dnn = FFNet(in_size=in_size_flow,
+                        out_size=x_dnn_osz,
+                        hidden_size=encoder_depth *
+                        (encoder_size * x_dnn_osz, ), # hidden size is equal encoder depth (encoder_size*x_dnn_osz)
                         # if encoder depth = 2 -> (encoder_size*x_dnn_osz, encoder_size*x_dnn_osz)
-                           use_batch_norm=use_batch_norm)
+                        use_batch_norm=use_batch_norm)
 
-        # if trunk net is there, then output dimension of branch net needs to increase 
         u_dnn_isz = control_rnn_size
-        if self.trunk == None:
-            self.u_dnn = FFNet(in_size=u_dnn_isz,
-                            out_size=self.modes,
-                            hidden_size=decoder_depth *
-                            (decoder_size * u_dnn_isz, ),
-                            use_batch_norm=use_batch_norm)
-        else: # trunk net 
-            self.u_dnn = FFNet(in_size=u_dnn_isz,
-                            out_size=self.modes+self.trunk_modes,
-                            hidden_size=decoder_depth *
-                            (decoder_size * u_dnn_isz, ),
-                            use_batch_norm=use_batch_norm)
+        self.u_dnn = FFNet(in_size=u_dnn_isz,
+                        out_size=out_size_flow,
+                        hidden_size=decoder_depth *
+                        (decoder_size * u_dnn_isz, ),
+                        use_batch_norm=use_batch_norm)
             
         ### Trunk net used to encode locations and find phi(x), takes as as input a location x
         
@@ -73,6 +76,8 @@ class CausalFlowModel(nn.Module):
 
 
     def forward(self, x, rnn_input, deltas,X_loc,POD):
+        if self.projection:
+            x = torch.einsum("bni,bn->bi",POD[:,:,:self.modes],x)
         h0 = self.x_dnn(x)
         h0 = torch.stack(h0.split(self.control_rnn_size, dim=1))
         c0 = torch.zeros_like(h0)
