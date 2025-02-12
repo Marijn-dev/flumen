@@ -20,9 +20,9 @@ class CausalFlowModel(nn.Module):
         self.state_dim = state_dim
         self.control_dim = control_dim
         # self.output_dim = output_dim
-        self.modes = 16
+        self.modes = 10
         self.output_dim = self.modes
-        self.trunk_modes = 16
+        self.trunk_modes = 10
         self.control_rnn_size = control_rnn_size
 
         x_dnn_osz = control_rnn_depth * control_rnn_size
@@ -34,7 +34,7 @@ class CausalFlowModel(nn.Module):
                            use_batch_norm=use_batch_norm)
         
         self.trunk = None
-        
+
         self.u_rnn = torch.nn.LSTM(
             input_size=1 + control_dim,
             hidden_size=control_rnn_size,
