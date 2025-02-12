@@ -35,7 +35,7 @@ def main():
             data.generator.noise_std = args.noise_std
 
     experiment, train_args = prepare_experiment(data, args)
-    wandb.init(project='Flumen_branch_trunk',name=args.experiment_id,config=args)
+    wandb.init(project='Flumen_branch_POD',name=args.experiment_id,config=args)
     
     experiment.generator = data.generator
 
