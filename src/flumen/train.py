@@ -5,18 +5,18 @@ import wandb
 import random
 import numpy as np
 
-def prep_inputs(x0, y,u, lengths, device):
+def prep_inputs(x0, y,u, lengths, Phi,device):
     sort_idxs = torch.argsort(lengths, descending=True)
 
     x0 = x0[sort_idxs]
     y = y[sort_idxs]
     u = u[sort_idxs]
     lengths = lengths[sort_idxs]
+    Phi = Phi[sort_idxs]
     road_length = 100
     step = road_length / y.shape[1]
 
     locations = np.arange(start=step,stop=road_length+step,step=step) # shape y.shape[1]
-    # locations = np.tile(locations, (y.shape[0], 1))[:, :, np.newaxis] # shape (batch size, y.shape[1],1)
     locations = torch.from_numpy(locations).type(torch.get_default_dtype()).reshape((-1, 1))
 
     deltas = u[:, :lengths[0], -1].unsqueeze(-1)
@@ -30,9 +30,10 @@ def prep_inputs(x0, y,u, lengths, device):
     y = y.to(device)
     u = u.to(device)
     deltas = deltas.to(device)
+    Phi = Phi.to(device)
     locations = locations.to(device)
-
-    return x0, y,u, deltas, locations
+    
+    return x0, y,u, deltas, locations,Phi
 
 
 def validate(data, loss_fn, model, device):
@@ -40,19 +41,19 @@ def validate(data, loss_fn, model, device):
 
     with torch.no_grad():
         for example in data:
-                x0, y,u, deltas,locations = prep_inputs(*example, device)
-                y_pred = model(x0, u, deltas,locations)
+                x0, y,u, deltas,locations,Phi = prep_inputs(*example, device)
+                y_pred = model(x0, u, deltas,locations,Phi)
                 vl += loss_fn(y, y_pred).item()
-
+                
     return model.state_dim * vl / len(data)
 
 
 def train_step(example, loss_fn, model, optimizer, device):
-    x0, y, u, deltas,locations = prep_inputs(*example, device)
+    x0, y, u, deltas,locations,Phi = prep_inputs(*example, device)
 
     optimizer.zero_grad()
 
-    y_pred = model(x0, u, deltas,locations)
+    y_pred = model(x0, u, deltas,locations,Phi)
     loss = model.state_dim * loss_fn(y, y_pred)
 
     loss.backward()

@@ -32,7 +32,7 @@ class RawTrajectoryDataset(Dataset):
         self.state = []
         self.state_noise = []
         self.control_seq = []
-
+        self.Phi = [] # basis functions from SVD
         # location of the output, the road is L long and divided in to state_dim segments, input is the boundary location x = 0
         
         
@@ -48,7 +48,11 @@ class RawTrajectoryDataset(Dataset):
             self.state.append(
                 torch.from_numpy(sample["state"]).type(
                     torch.get_default_dtype()).reshape((-1, self.state_dim)))
-  
+            
+            U, S, V = np.linalg.svd(np.transpose(sample['state']),full_matrices=True)
+
+            self.Phi.append(
+                torch.from_numpy(U).type(torch.get_default_dtype()))
 
             self.state_noise.append(
                 torch.normal(mean=0.,
@@ -87,7 +91,7 @@ class RawTrajectoryDataset(Dataset):
     def __getitem__(self, index):
         return (self.init_state[index], self.init_state_noise[index],
                 self.time[index], self.state[index],self.state_noise[index],
-                self.control_seq[index])
+                self.control_seq[index],self.Phi[index])
 
 
 class TrajectoryDataset(Dataset):
@@ -108,12 +112,13 @@ class TrajectoryDataset(Dataset):
         state = []
         rnn_input_data = []
         seq_len_data = []
+        Phi = []
 
         rng = np.random.default_rng()
 
         k_tr = 0
 
-        for (x0, x0_n, t, y, y_n,u) in raw_data:
+        for (x0, x0_n, t, y, y_n,u,phi) in raw_data:
             y += y_n
             x0 += x0_n
 
@@ -128,6 +133,7 @@ class TrajectoryDataset(Dataset):
                     state.append(s)
                     seq_len_data.append(rnn_input_len)
                     rnn_input_data.append(rnn_input)
+                    Phi.append(phi)
 
             else:
                 for k_s, y_s in enumerate(y):
@@ -155,6 +161,7 @@ class TrajectoryDataset(Dataset):
         self.init_state = torch.stack(init_state).type(
             torch.get_default_dtype())
         self.state = torch.stack(state).type(torch.get_default_dtype())
+        self.Phi = torch.stack(Phi).type(torch.get_default_dtype())
         self.rnn_input = torch.stack(rnn_input_data).type(
             torch.get_default_dtype())
         self.seq_lens = torch.tensor(seq_len_data, dtype=torch.long)
@@ -193,4 +200,4 @@ class TrajectoryDataset(Dataset):
 
     def __getitem__(self, index):
         return (self.init_state[index], self.state[index],
-                self.rnn_input[index], self.seq_lens[index])
+                self.rnn_input[index], self.seq_lens[index],self.Phi[index])

@@ -20,8 +20,8 @@ class CausalFlowModel(nn.Module):
         self.state_dim = state_dim
         self.control_dim = control_dim
         # self.output_dim = output_dim
-        R = 16
-        self.output_dim = R
+        self.modes = 50
+        self.output_dim = self.modes
 
         self.control_rnn_size = control_rnn_size
 
@@ -44,24 +44,25 @@ class CausalFlowModel(nn.Module):
 
         u_dnn_isz = control_rnn_size
         self.u_dnn = FFNet(in_size=u_dnn_isz,
-                           out_size=R,
+                           out_size=self.modes,
                            hidden_size=decoder_depth *
                            (decoder_size * u_dnn_isz, ),
                            use_batch_norm=use_batch_norm)
         
         ### Trunk net used to encode locations and find phi(x), takes as as input a location x
-        self.trunk = Trunk(in_size=1,
-                           out_size=R,
-                           hidden_size=encoder_depth *
-                           (encoder_size * x_dnn_osz, ), # hidden size is equal encoder depth (encoder_size*x_dnn_osz)
-                        # if encoder depth = 2 -> (encoder_size*x_dnn_osz, encoder_size*x_dnn_osz)
-                           use_batch_norm=use_batch_norm)
+        # self.trunk = Trunk(in_size=1,
+        #                    out_size=R,
+        #                    hidden_size=encoder_depth *
+        #                    (encoder_size * x_dnn_osz, ), # hidden size is equal encoder depth (encoder_size*x_dnn_osz)
+        #                 # if encoder depth = 2 -> (encoder_size*x_dnn_osz, encoder_size*x_dnn_osz)
+        #                    use_batch_norm=use_batch_norm)
         
+        self.trunk = None
         # self.bias = nn.Parameter(torch.zeros(1, output_dim))  # Shape: [1, num_locations]
         self.bias = nn.Parameter(torch.tensor(0.0))
 
 
-    def forward(self, x, rnn_input, deltas,X_loc):
+    def forward(self, x, rnn_input, deltas,X_loc,POD):
         h0 = self.x_dnn(x)
         h0 = torch.stack(h0.split(self.control_rnn_size, dim=1))
         c0 = torch.zeros_like(h0)
@@ -77,10 +78,16 @@ class CausalFlowModel(nn.Module):
         X_func = self.u_dnn(encoded_controls[range(encoded_controls.shape[0]),
                                              h_lens - 1, :])
         
-        X_loc = self.trunk(X_loc)
+        # no trunk net
+        if self.trunk is None:
+            output = torch.einsum("bi,bni->bn", X_func,POD[:,:,:self.modes] )
 
-        output = torch.einsum("BR, LR -> BL", X_func, X_loc)  # B = Batch , R = Output features R, L is locations
-        # output += self.bias
+        # trunk net
+        else:
+            X_loc = self.trunk(X_loc)
+            output = torch.einsum("bi,ni->bn", X_func, torch.concat((POD[:, :self.modes], X_loc), 1))
+            output += self.bias
+
         
         return output
 
