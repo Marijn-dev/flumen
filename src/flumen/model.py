@@ -57,7 +57,8 @@ class CausalFlowModel(nn.Module):
                         # if encoder depth = 2 -> (encoder_size*x_dnn_osz, encoder_size*x_dnn_osz)
                            use_batch_norm=use_batch_norm)
         
-        self.bias = nn.Parameter(torch.zeros(1, output_dim))  # Shape: [1, num_locations]
+        # self.bias = nn.Parameter(torch.zeros(1, output_dim))  # Shape: [1, num_locations]
+        self.bias = nn.Parameter(torch.tensor(0.0))
 
 
     def forward(self, x, rnn_input, deltas,X_loc):
