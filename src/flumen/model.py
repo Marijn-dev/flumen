@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
 class CausalFlowModel(nn.Module):
@@ -24,7 +25,7 @@ class CausalFlowModel(nn.Module):
         self.output_dim = self.modes
         self.trunk_modes = 16
         self.control_rnn_size = control_rnn_size
-        self.trunk_enabled = True
+        self.trunk_enabled = False
 
         x_dnn_osz = control_rnn_depth * control_rnn_size
         if self.trunk_enabled:
@@ -43,12 +44,14 @@ class CausalFlowModel(nn.Module):
         self.projection = True
         if self.projection:
             in_size_flow = self.modes
+            in_size_rnn = self.modes
         else:
             in_size_flow = state_dim
+            in_size_rnn = control_dim
 
 
         self.u_rnn = torch.nn.LSTM(
-            input_size=1 + control_dim,
+            input_size=1 + in_size_rnn,
             hidden_size=control_rnn_size,
             batch_first=True,
             num_layers=control_rnn_depth,
@@ -77,10 +80,22 @@ class CausalFlowModel(nn.Module):
 
     def forward(self, x, rnn_input, deltas,X_loc,POD):
         if self.projection:
+            # project initial state
             x = torch.einsum("bni,bn->bi",POD[:,:,:self.modes],x)
+
+            # project input of the RNN
+            unpadded_seq, lengths = pad_packed_sequence(rnn_input, batch_first=True)
+            POD_0 = POD[:,0,:self.modes] # modes corresponding to x0
+            U_without_deltas = unpadded_seq[:,:,0] # select the inputs to project
+            U_deltas = unpadded_seq[:,:,1] # the delta values
+            U_projected = torch.einsum("bi,bj->bij",U_without_deltas,POD_0) # project the inputs
+            U_projected = torch.cat([U_projected,U_deltas.unsqueeze(-1)],dim=-1) # combine projected inputs and deltas
+            rnn_input = pack_padded_sequence(U_projected, lengths, batch_first=True, enforce_sorted=True)
+
         h0 = self.x_dnn(x)
         h0 = torch.stack(h0.split(self.control_rnn_size, dim=1))
         c0 = torch.zeros_like(h0)
+
 
         rnn_out_seq_packed, _ = self.u_rnn(rnn_input, (h0, c0))
         h, h_lens = torch.nn.utils.rnn.pad_packed_sequence(rnn_out_seq_packed,
