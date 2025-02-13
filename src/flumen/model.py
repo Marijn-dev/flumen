@@ -38,20 +38,16 @@ class CausalFlowModel(nn.Module):
         self.flow_decoder_dim = 0 # output dimension of the decoder of flow function
         x_dnn_osz = control_rnn_depth * control_rnn_size
 
-        print(self.POD_enabled)
-        print(use_trunk)
         if self.POD_enabled:
             self.flow_decoder_dim += self.POD_modes
         
         if self.POD_projection_enabled:
-            self.control_dim =self.modes
-            self.state_dim =self.modes
+            self.control_dim =self.POD_modes
+            self.state_dim =self.POD_modes
             assert self.POD_enabled == True, "POD must be enabled for POD projection"
     
         if self.trunk_enabled:
             self.flow_decoder_dim += self.trunk_dim
-            print(self.trunk_enabled)
-            print('test')
             # initialize trunk net
             self.trunk = Trunk(in_size=1,
                                 out_size=self.trunk_dim,

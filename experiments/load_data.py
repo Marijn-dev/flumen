@@ -34,9 +34,22 @@ def main():
         if args.noise_std is not None:
             data.generator.noise_std = args.noise_std
 
-    experiment, train_args = prepare_experiment(data, args)
-    wandb.init(project='Flumen_branch_POD',name=args.experiment_id,config=args)
+    experiment_id = ""
+    if args.POD_enabled:
+        experiment_id += "M" + str(args.POD_modes) + "_"
+        if args.POD_projection_enabled:
+            experiment_id += "PR_"
+    if args.trunk_enabled:
+        experiment_id += "TR" + str(args.trunk_size) + "_"
+    if args.bias_enabled:
+        experiment_id += "b_" 
+
+    experiment_id += "HS" + str(args.control_rnn_size) + "_" + "HD" + str(args.control_rnn_depth) + "_"
+    experiment_id += "ES" + str(args.encoder_size) + "_" + "ED" + str(args.encoder_depth) + "_"
+    experiment_id += "DS" + str(args.decoder_size) + "_" + "DD" + str(args.decoder_depth)
     
+    experiment, train_args = prepare_experiment(data, args)
+    wandb.init(project='Flumen_branch_POD',name=experiment_id,config=args)
     experiment.generator = data.generator
 
     train_time = train(experiment, *train_args)
