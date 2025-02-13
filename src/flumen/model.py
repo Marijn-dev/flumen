@@ -232,6 +232,7 @@ class Trunk(nn.Module):
         self.layers.append(nn.Linear(40, 40))
         self.layers.append(activation())
         self.layers.append(nn.Linear(40, out_size))
+        self.layers.append(activation())
 
         # if use_batch_norm:
         #     self.layers.append(nn.BatchNorm1d(hidden_size[0]))
