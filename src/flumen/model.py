@@ -15,111 +15,146 @@ class CausalFlowModel(nn.Module):
                  encoder_depth,
                  decoder_size,
                  decoder_depth,
-                 use_batch_norm=False):
+                 use_POD,
+                 POD_modes,
+                 use_POD_projection,
+                 use_trunk,
+                 trunk_size,
+                 use_bias,
+                 use_batch_norm=False,
+                 ):
         super(CausalFlowModel, self).__init__()
 
         self.state_dim = state_dim
         self.control_dim = control_dim
-        # self.output_dim = output_dim
-        self.modes = 16
-        self.output_dim = self.modes
-        self.trunk_modes = 16
+        self.output_dim = output_dim
         self.control_rnn_size = control_rnn_size
-        self.trunk_enabled = False
-
+        self.POD_enabled = use_POD
+        self.trunk_enabled = use_trunk
+        self.POD_projection_enabled = use_POD_projection
+        self.POD_modes = POD_modes
+        self.trunk_dim = trunk_size 
+        self.bias_enabled = use_bias
+        self.flow_decoder_dim = 0 # output dimension of the decoder of flow function
         x_dnn_osz = control_rnn_depth * control_rnn_size
+
+        print(self.POD_enabled)
+        print(use_trunk)
+        if self.POD_enabled:
+            self.flow_decoder_dim += self.POD_modes
+        
+        if self.POD_projection_enabled:
+            self.control_dim =self.modes
+            self.state_dim =self.modes
+            assert self.POD_enabled == True, "POD must be enabled for POD projection"
+    
         if self.trunk_enabled:
-            out_size_flow = self.modes+self.trunk_modes
+            self.flow_decoder_dim += self.trunk_dim
+            print(self.trunk_enabled)
+            print('test')
+            # initialize trunk net
             self.trunk = Trunk(in_size=1,
-                                out_size=self.trunk_modes,
+                                out_size=self.trunk_dim,
                                 hidden_size=encoder_depth *
-                                (encoder_size * x_dnn_osz, ), # hidden size is equal encoder depth (encoder_size*x_dnn_osz)
-                            # if encoder depth = 2 -> (encoder_size*x_dnn_osz, encoder_size*x_dnn_osz)
+                                (encoder_size * x_dnn_osz, ), 
                                 use_batch_norm=use_batch_norm)
+            
         else:
             self.trunk = None
-            out_size_flow = self.modes
+        
+        # Regular flow function
+        if self.trunk_enabled==False and self.POD_enabled==False:
+            self.flow_decoder_dim=self.output_dim
 
-        # project the inputs to the flow model 
-        self.projection = True
-        if self.projection:
-            in_size_flow = self.modes
-            in_size_rnn = self.modes
-        else:
-            in_size_flow = state_dim
-            in_size_rnn = control_dim
-
-
+            
+        # LSTM (FLOW Function)
         self.u_rnn = torch.nn.LSTM(
-            input_size=1 + in_size_rnn,
+            input_size=1 + self.control_dim,
             hidden_size=control_rnn_size,
             batch_first=True,
             num_layers=control_rnn_depth,
             dropout=0,
         )
 
-        self.x_dnn = FFNet(in_size=in_size_flow,
+        # Encoder (FLOW Function)
+        self.x_dnn = FFNet(in_size=self.state_dim,
                         out_size=x_dnn_osz,
                         hidden_size=encoder_depth *
                         (encoder_size * x_dnn_osz, ), # hidden size is equal encoder depth (encoder_size*x_dnn_osz)
                         # if encoder depth = 2 -> (encoder_size*x_dnn_osz, encoder_size*x_dnn_osz)
                         use_batch_norm=use_batch_norm)
 
+        # Decoder
         u_dnn_isz = control_rnn_size
         self.u_dnn = FFNet(in_size=u_dnn_isz,
-                        out_size=out_size_flow,
+                        out_size=self.flow_decoder_dim,
                         hidden_size=decoder_depth *
                         (decoder_size * u_dnn_isz, ),
                         use_batch_norm=use_batch_norm)
-            
-        ### Trunk net used to encode locations and find phi(x), takes as as input a location x
         
-        # self.bias = nn.Parameter(torch.zeros(1, output_dim))  # Shape: [1, num_locations]
-        self.bias = nn.Parameter(torch.tensor(0.0))
+        # Bias at final inner product
+        if self.bias_enabled:
+            self.bias = nn.Parameter(torch.tensor(0.0))
 
 
     def forward(self, x, rnn_input, deltas,X_loc,POD):
-        if self.projection:
+
+        # project the inputs to the flow function
+        if self.POD_projection_enabled:
+
             # project initial state
-            x = torch.einsum("bni,bn->bi",POD[:,:,:self.modes],x)
+            x = torch.einsum("bni,bn->bi",POD[:,:,:self.POD_modes],x)
 
             # project input of the RNN
             unpadded_seq, lengths = pad_packed_sequence(rnn_input, batch_first=True)
-            POD_0 = POD[:,0,:self.modes] # modes corresponding to x0
+            POD_0 = POD[:,0,:self.POD_modes] # modes corresponding to x0
             U_without_deltas = unpadded_seq[:,:,0] # select the inputs to project
             U_deltas = unpadded_seq[:,:,1] # the delta values
             U_projected = torch.einsum("bi,bj->bij",U_without_deltas,POD_0) # project the inputs
             U_projected = torch.cat([U_projected,U_deltas.unsqueeze(-1)],dim=-1) # combine projected inputs and deltas
             rnn_input = pack_padded_sequence(U_projected, lengths, batch_first=True, enforce_sorted=True)
-
+        
+        # Encoder 
         h0 = self.x_dnn(x)
         h0 = torch.stack(h0.split(self.control_rnn_size, dim=1))
         c0 = torch.zeros_like(h0)
 
-
+        # LSTM
         rnn_out_seq_packed, _ = self.u_rnn(rnn_input, (h0, c0))
         h, h_lens = torch.nn.utils.rnn.pad_packed_sequence(rnn_out_seq_packed,
                                                            batch_first=True)
 
         h_shift = torch.roll(h, shifts=1, dims=1)
         h_shift[:, 0, :] = h0[-1]
-
         encoded_controls = (1 - deltas) * h_shift + deltas * h
+
+        # Decoder
         X_func = self.u_dnn(encoded_controls[range(encoded_controls.shape[0]),
                                              h_lens - 1, :])
         
-        # no trunk net
-        if self.trunk is None:
-            output = torch.einsum("bi,bni->bn", X_func,POD[:,:,:self.modes] )
-
-        # trunk net
-        else:
+        # Regular flow function
+        if self.trunk_enabled==False and self.POD_enabled==False:
+            return X_func
+        
+        # POD AND Trunk net
+        elif self.trunk_enabled and self.POD_enabled:
             X_loc = self.trunk(X_loc)
             X_loc = X_loc.unsqueeze(0).expand(POD.shape[0],-1,-1)
-            output = torch.einsum("bi,bni->bn", X_func, torch.concat((POD[:,:, :self.modes], X_loc), 2))
+            output = torch.einsum("bi,bni->bn", X_func, torch.concat((POD[:,:, :self.POD_modes], X_loc), 2))
+
+        # POD
+        elif self.POD_enabled:
+            output = torch.einsum("bi,bni->bn", X_func,POD[:,:,:self.POD_modes] )
+
+        # Trunk
+        else:
+            X_loc = self.trunk(X_loc)
+            output = torch.einsum("bi, ni -> bn", X_func, X_loc)  # B = Batch , R = Output features R, L is locations
+        
+        # bias
+        if self.bias_enabled:
             output += self.bias
 
-        
         return output
 
 class CausalFlowModelV2(nn.Module):

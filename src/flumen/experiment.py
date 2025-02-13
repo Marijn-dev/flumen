@@ -33,7 +33,15 @@ def instantiate_model(args, state_dim, control_dim, output_dim):
                            encoder_depth=args.encoder_depth,
                            decoder_size=args.decoder_size,
                            decoder_depth=args.decoder_depth,
-                           use_batch_norm=args.use_batch_norm)
+                           use_POD=args.POD_enabled,
+                           POD_modes = args.POD_modes,
+                           use_POD_projection = args.POD_projection_enabled,
+                           use_trunk=args.trunk_enabled,
+                           trunk_size=args.trunk_size,
+                           use_bias=args.bias_enabled,
+                           use_batch_norm=args.use_batch_norm,
+                           )
+
 
 
 class Experiment:

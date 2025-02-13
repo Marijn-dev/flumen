@@ -53,7 +53,33 @@ def get_arg_parser():
                             type=positive_int,
                             help="Depth of the decoder",
                             required=True)
-
+    
+    model_args.add_argument('--POD_enabled',
+                            action='store_true',
+                            help="whether to include POD basis functions")
+    
+    model_args.add_argument('--POD_modes',
+                            type=positive_int,
+                            help="modes retained for the projection",
+                            default=50)
+    
+    model_args.add_argument('--POD_projection_enabled',
+                            action='store_true',
+                            help="enables projection of the inputs to the flow model")
+    
+    model_args.add_argument('--trunk_size',
+                            type=positive_int,
+                            help="size of the trunk net",
+                            default=10)
+    
+    model_args.add_argument('--trunk_enabled',
+                            action='store_true',
+                            help="whether trunk net is enabled")
+    
+    model_args.add_argument('--bias_enabled',
+                            action='store_true',
+                            help="whether to add bias at the final inner product")
+    
     opt_args.add_argument('--batch_size',
                           type=positive_int,
                           help="Batch size for training and validation",
