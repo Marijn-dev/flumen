@@ -52,7 +52,7 @@ class RawTrajectoryDataset(Dataset):
             # U, S, V = np.linalg.svd(np.transpose(sample['state']),full_matrices=True)
 
             self.Phi.append(
-                torch.from_numpy(sample["phi"][0:,:]).type(torch.get_default_dtype())) # neglect x=0 (left boundary)
+                torch.from_numpy(sample["phi"]).type(torch.get_default_dtype())) # neglect x=0 (left boundary)
             
             self.state_noise.append(
                 torch.normal(mean=0.,

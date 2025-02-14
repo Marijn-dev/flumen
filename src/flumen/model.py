@@ -141,7 +141,8 @@ class CausalFlowModel(nn.Module):
 
         # POD
         elif self.POD_enabled:
-            output = torch.einsum("bi,bni->bn", X_func,POD[:,:,:self.POD_modes] )
+            print(POD[:,1:,:self.POD_modes].shape)
+            output = torch.einsum("bi,bni->bn", X_func,POD[:,1:,:self.POD_modes] )
 
         # Trunk
         else:
