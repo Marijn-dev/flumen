@@ -242,12 +242,13 @@ class Trunk(nn.Module):
         self.out_size = out_size
 
         self.layers = nn.ModuleList()
-        self.layers.append(nn.Linear(in_size, 40))
+        self.layers.append(nn.Linear(in_size, 60))
         self.layers.append(activation())
-        self.layers.append(nn.Linear(40, 40))
+        self.layers.append(nn.Linear(60, 60))
         self.layers.append(activation())
-        self.layers.append(nn.Linear(40, out_size))
+        self.layers.append(nn.Linear(60, 60))
         self.layers.append(activation())
+        self.layers.append(nn.Linear(60, out_size))
 
         # if use_batch_norm:
         #     self.layers.append(nn.BatchNorm1d(hidden_size[0]))
