@@ -42,7 +42,7 @@ class CausalFlowModel(nn.Module):
             self.flow_decoder_dim += self.POD_modes
         
         if self.POD_projection_enabled:
-            self.control_dim =self.POD_modes
+            self.control_dim =1
             self.state_dim =self.POD_modes
             assert self.POD_enabled == True, "POD must be enabled for POD projection"
     
@@ -93,7 +93,7 @@ class CausalFlowModel(nn.Module):
             self.bias = nn.Parameter(torch.tensor(0.0))
 
 
-    def forward(self, x, rnn_input, deltas,X_loc,POD):
+    def forward(self, x, rnn_input, rnn_input_proj,deltas,X_loc,POD):
 
         # project the inputs to the flow function
         if self.POD_projection_enabled:
@@ -101,14 +101,15 @@ class CausalFlowModel(nn.Module):
             # project initial state
             x = torch.einsum("bni,bn->bi",POD[:,:,:self.POD_modes],x)
 
-            # project input of the RNN
-            unpadded_seq, lengths = pad_packed_sequence(rnn_input, batch_first=True)
-            POD_0 = POD[:,0,:self.POD_modes] # modes corresponding to x0
-            U_without_deltas = unpadded_seq[:,:,0] # select the inputs to project
-            U_deltas = unpadded_seq[:,:,1] # the delta values
-            U_projected = torch.einsum("bi,bj->bij",U_without_deltas,POD_0) # project the inputs
-            U_projected = torch.cat([U_projected,U_deltas.unsqueeze(-1)],dim=-1) # combine projected inputs and deltas
-            rnn_input = pack_padded_sequence(U_projected, lengths, batch_first=True, enforce_sorted=True)
+            # # project input of the RNN
+            # unpadded_seq, lengths = pad_packed_sequence(rnn_input, batch_first=True)
+            # POD_0 = POD[:,0,:self.POD_modes] # modes corresponding to x0
+            # U_without_deltas = unpadded_seq[:,:,0] # select the inputs to project
+            # U_deltas = unpadded_seq[:,:,1] # the delta values
+            # U_projected = torch.einsum("bi,bj->bij",U_without_deltas,POD_0) # project the inputs
+            # U_projected = torch.cat([U_projected,U_deltas.unsqueeze(-1)],dim=-1) # combine projected inputs and deltas
+            # rnn_input = pack_padded_sequence(U_projected, lengths, batch_first=True, enforce_sorted=True)
+            rnn_input = rnn_input_proj
         
         # Encoder 
         h0 = self.x_dnn(x)

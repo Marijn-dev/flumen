@@ -32,8 +32,8 @@ class RawTrajectoryDataset(Dataset):
         self.state = []
         self.state_noise = []
         self.control_seq = []
+        self.control_seq_projected = []
         self.Phi = [] # basis functions from SVD
-        # location of the output, the road is L long and divided in to state_dim segments, input is the boundary location x = 0
         
         
         for k, sample in enumerate(data):
@@ -49,11 +49,11 @@ class RawTrajectoryDataset(Dataset):
                 torch.from_numpy(sample["state"]).type(
                     torch.get_default_dtype()).reshape((-1, self.state_dim)))
             
-            U, S, V = np.linalg.svd(np.transpose(sample['state']),full_matrices=True)
+            # U, S, V = np.linalg.svd(np.transpose(sample['state']),full_matrices=True)
 
             self.Phi.append(
-                torch.from_numpy(U).type(torch.get_default_dtype()))
-
+                torch.from_numpy(sample["phi"][1:,:]).type(torch.get_default_dtype())) # neglect x=0 (left boundary)
+            
             self.state_noise.append(
                 torch.normal(mean=0.,
                              std=noise_std,
@@ -62,18 +62,45 @@ class RawTrajectoryDataset(Dataset):
             self.control_seq.append(
                 torch.from_numpy(sample["control"]).type(
                     torch.get_default_dtype()).reshape((-1, self.control_dim)))
-
+            
+            self.control_seq_projected.append(
+                torch.from_numpy(sample["control_projected"]).type(
+                    torch.get_default_dtype()).reshape((-1, self.control_dim)))
+            
     @classmethod
     def generate(cls, generator, time_horizon, n_trajectories, n_samples,
                  noise_std):
 
         def get_example():
             x0, t, y, u = generator.get_example(time_horizon, n_samples)
+
+            p0_t = [] # input values at time t
+            indices = []
+            for t_ in t:
+                index = int(np.ceil((t_ - 0) / 0.2)) # self.delta has to be 0.2!
+                p0_t.append(u[index,:])
+
+            p0_t = np.array(p0_t)
+            y_y0 =np.hstack((p0_t, y)) # combine p0(t) with px(t)
+
+            U, S, V = np.linalg.svd(np.transpose(y_y0),full_matrices=False) # compute SVD
+            a_t = U.T @ np.transpose(y_y0) # compute temporal coefficients
+            a_t_x0 = a_t[0]                # temporal coefficient corresponding to input
+
+            a_projected = np.zeros_like(u)  # Initialize with zeros
+
+            # reconstruct back to original u
+            for i, t_ in enumerate(t):
+                index = int(np.ceil((t_ - 0) / 0.2))  # Recompute index
+                a_projected[index, :] = a_t_x0[i]   # Assign back
+
             return {
                 "init_state": x0,
                 "time": t,
                 "state": y,
                 "control": u,
+                "phi":U,
+                "control_projected":a_projected
             }
 
         data = [get_example() for _ in range(n_trajectories)]
@@ -91,7 +118,7 @@ class RawTrajectoryDataset(Dataset):
     def __getitem__(self, index):
         return (self.init_state[index], self.init_state_noise[index],
                 self.time[index], self.state[index],self.state_noise[index],
-                self.control_seq[index],self.Phi[index])
+                self.control_seq[index],self.control_seq_projected[index],self.Phi[index])
 
 
 class TrajectoryDataset(Dataset):
@@ -111,6 +138,7 @@ class TrajectoryDataset(Dataset):
         init_state = []
         state = []
         rnn_input_data = []
+        rnn_input_data_projected = []
         seq_len_data = []
         Phi = []
 
@@ -118,7 +146,7 @@ class TrajectoryDataset(Dataset):
 
         k_tr = 0
 
-        for (x0, x0_n, t, y, y_n,u,phi) in raw_data:
+        for (x0, x0_n, t, y, y_n,u,u_proj,phi) in raw_data:
             y += y_n
             x0 += x0_n
 
@@ -126,6 +154,8 @@ class TrajectoryDataset(Dataset):
                 for k_s, y_s in enumerate(y):
                     rnn_input, rnn_input_len = self.process_example(
                         0, k_s, t, u, self.delta)
+                    rnn_input_proj, _ = self.process_example(
+                        0, k_s, t, u_proj, self.delta)
 
                     s = y_s.view(1, -1)[:, mask].reshape(-1)
 
@@ -133,6 +163,7 @@ class TrajectoryDataset(Dataset):
                     state.append(s)
                     seq_len_data.append(rnn_input_len)
                     rnn_input_data.append(rnn_input)
+                    rnn_input_data_projected.append(rnn_input_proj)
                     Phi.append(phi)
 
             else:
@@ -163,6 +194,8 @@ class TrajectoryDataset(Dataset):
         self.state = torch.stack(state).type(torch.get_default_dtype())
         self.Phi = torch.stack(Phi).type(torch.get_default_dtype())
         self.rnn_input = torch.stack(rnn_input_data).type(
+            torch.get_default_dtype())
+        self.rnn_input_projected = torch.stack(rnn_input_data_projected).type(
             torch.get_default_dtype())
         self.seq_lens = torch.tensor(seq_len_data, dtype=torch.long)
 
@@ -200,4 +233,4 @@ class TrajectoryDataset(Dataset):
 
     def __getitem__(self, index):
         return (self.init_state[index], self.state[index],
-                self.rnn_input[index], self.seq_lens[index],self.Phi[index])
+                self.rnn_input[index], self.rnn_input_projected[index],self.seq_lens[index],self.Phi[index])

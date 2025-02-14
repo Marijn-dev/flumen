@@ -5,12 +5,13 @@ import wandb
 import random
 import numpy as np
 
-def prep_inputs(x0, y,u, lengths, Phi,device):
+def prep_inputs(x0, y,u, u_proj,lengths, Phi,device):
     sort_idxs = torch.argsort(lengths, descending=True)
 
     x0 = x0[sort_idxs]
     y = y[sort_idxs]
     u = u[sort_idxs]
+    u_proj = u_proj[sort_idxs]
     lengths = lengths[sort_idxs]
     Phi = Phi[sort_idxs]
     road_length = 100
@@ -26,14 +27,20 @@ def prep_inputs(x0, y,u, lengths, Phi,device):
                                                 batch_first=True,
                                                 enforce_sorted=True)
 
+    u_proj = torch.nn.utils.rnn.pack_padded_sequence(u_proj,
+                                                lengths,
+                                                batch_first=True,
+                                                enforce_sorted=True)
+
     x0 = x0.to(device)
     y = y.to(device)
     u = u.to(device)
+    u_proj = u_proj.to(device)
     deltas = deltas.to(device)
     Phi = Phi.to(device)
     locations = locations.to(device)
     
-    return x0, y,u, deltas, locations,Phi
+    return x0, y,u,u_proj, deltas, locations,Phi
 
 
 def validate(data, loss_fn, model, device):
@@ -41,19 +48,19 @@ def validate(data, loss_fn, model, device):
 
     with torch.no_grad():
         for example in data:
-                x0, y,u, deltas,locations,Phi = prep_inputs(*example, device)
-                y_pred = model(x0, u, deltas,locations,Phi)
+                x0, y,u,u_proj ,deltas,locations,Phi = prep_inputs(*example, device)
+                y_pred = model(x0, u,u_proj ,deltas,locations,Phi)
                 vl += loss_fn(y, y_pred).item()
                 
     return model.state_dim * vl / len(data)
 
 
 def train_step(example, loss_fn, model, optimizer, device):
-    x0, y, u, deltas,locations,Phi = prep_inputs(*example, device)
+    x0, y, u,u_proj, deltas,locations,Phi = prep_inputs(*example, device)
 
     optimizer.zero_grad()
 
-    y_pred = model(x0, u, deltas,locations,Phi)
+    y_pred = model(x0, u, u_proj,deltas,locations,Phi)
     loss = model.state_dim * loss_fn(y, y_pred)
 
     loss.backward()
