@@ -99,9 +99,9 @@ class CausalFlowModel(nn.Module):
         if self.POD_projection_enabled:
 
             # project initial state
-            x = torch.einsum("bni,bn->bi",POD[:,:,:self.POD_modes],x)
+            x = torch.einsum("bni,bn->bi",POD[:,1:,:self.POD_modes],x)
 
-            # # project input of the RNN
+            # project input of the RNN
             # unpadded_seq, lengths = pad_packed_sequence(rnn_input, batch_first=True)
             # POD_0 = POD[:,0,:self.POD_modes] # modes corresponding to x0
             # U_without_deltas = unpadded_seq[:,:,0] # select the inputs to project
