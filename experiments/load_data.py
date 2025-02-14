@@ -41,6 +41,8 @@ def main():
             experiment_id += "PR_"
     if args.trunk_enabled:
         experiment_id += "TR" + str(args.trunk_size) + "_"
+    if args.time_enabled:
+        experiment_id += "T" + "_"
     if args.bias_enabled:
         experiment_id += "b_" 
 
