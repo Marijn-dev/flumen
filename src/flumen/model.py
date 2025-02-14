@@ -42,7 +42,7 @@ class CausalFlowModel(nn.Module):
             self.flow_decoder_dim += self.POD_modes
         
         if self.POD_projection_enabled:
-            self.control_dim =1
+            self.control_dim =self.POD_modes
             self.state_dim =self.POD_modes
             assert self.POD_enabled == True, "POD must be enabled for POD projection"
     
@@ -102,14 +102,14 @@ class CausalFlowModel(nn.Module):
             x = torch.einsum("bni,bn->bi",POD[:,1:,:self.POD_modes],x)
 
             # project input of the RNN
-            # unpadded_seq, lengths = pad_packed_sequence(rnn_input, batch_first=True)
-            # POD_0 = POD[:,0,:self.POD_modes] # modes corresponding to x0
-            # U_without_deltas = unpadded_seq[:,:,0] # select the inputs to project
-            # U_deltas = unpadded_seq[:,:,1] # the delta values
-            # U_projected = torch.einsum("bi,bj->bij",U_without_deltas,POD_0) # project the inputs
-            # U_projected = torch.cat([U_projected,U_deltas.unsqueeze(-1)],dim=-1) # combine projected inputs and deltas
-            # rnn_input = pack_padded_sequence(U_projected, lengths, batch_first=True, enforce_sorted=True)
-            rnn_input = rnn_input_proj
+            unpadded_seq, lengths = pad_packed_sequence(rnn_input, batch_first=True)
+            POD_0 = POD[:,0,:self.POD_modes] # modes corresponding to x0
+            U_without_deltas = unpadded_seq[:,:,0] # select the inputs to project
+            U_deltas = unpadded_seq[:,:,1] # the delta values
+            U_projected = torch.einsum("bi,bj->bij",U_without_deltas,POD_0) # project the inputs
+            U_projected = torch.cat([U_projected,U_deltas.unsqueeze(-1)],dim=-1) # combine projected inputs and deltas
+            rnn_input = pack_padded_sequence(U_projected, lengths, batch_first=True, enforce_sorted=True)
+            # rnn_input = rnn_input_proj
         
         # Encoder 
         h0 = self.x_dnn(x)
