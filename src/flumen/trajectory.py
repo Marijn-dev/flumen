@@ -84,7 +84,8 @@ class RawTrajectoryDataset(Dataset):
             y_y0 =np.hstack((p0_t, y)) # combine p0(t) with px(t)
 
             U, S, V = np.linalg.svd(np.transpose(y_y0),full_matrices=False) # compute SVD
-            a_t = U.T @ np.transpose(y_y0) # compute temporal coefficients
+            R = 20
+            a_t = np.transpose(U[:,:R]) @ np.transpose(y_y0) # compute temporal coefficients
             a_t_x0 = a_t[0]                # temporal coefficient corresponding to input
 
             a_projected = np.zeros_like(u)  # Initialize with zeros
