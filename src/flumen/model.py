@@ -156,11 +156,11 @@ class CausalFlowModel(nn.Module):
            
             trunk_out = self.trunk(trunk_input)
             output = torch.einsum("bi, bni -> bn", X_func, trunk_out)  # B = Batch , R = Output features R, L is locations
-            
+
         # Trunk without time
         else:
             trunk_out = self.trunk(X_loc)
-            output = torch.einsum("bi, bni -> bn", X_func, trunk_out)  # B = Batch , R = Output features R, L is locations
+            output = torch.einsum("bi, ni -> bn", X_func, trunk_out)  # B = Batch , R = Output features R, L is locations
 
         # bias
         if self.bias_enabled:
