@@ -60,9 +60,9 @@ def prepare_experiment(data, args):
     early_stop = EarlyStopping(es_patience=args.es_patience,
                                es_delta=args.es_delta)
 
-    train_dl = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
-    val_dl = DataLoader(val_data, batch_size=args.batch_size, shuffle=True)
-    test_dl = DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
+    train_dl = DataLoader(train_data, batch_size=args.batch_size, shuffle=False)
+    val_dl = DataLoader(val_data, batch_size=args.batch_size, shuffle=False)
+    test_dl = DataLoader(test_data, batch_size=args.batch_size, shuffle=False)
 
     return experiment, (model, mse_loss, optimizer, sched, early_stop,
                         train_dl, val_dl, test_dl, device, args.n_epochs)

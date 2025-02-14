@@ -80,6 +80,10 @@ def get_arg_parser():
                             action='store_true',
                             help="whether to add bias at the final inner product")
     
+    model_args.add_argument('--time_enabled',
+                            action='store_true',
+                            help="whether to add time to trunk model")
+    
     opt_args.add_argument('--batch_size',
                           type=positive_int,
                           help="Batch size for training and validation",

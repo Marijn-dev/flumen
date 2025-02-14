@@ -39,6 +39,7 @@ def instantiate_model(args, state_dim, control_dim, output_dim):
                            use_trunk=args.trunk_enabled,
                            trunk_size=args.trunk_size,
                            use_bias=args.bias_enabled,
+                           use_time=args.time_enabled,
                            use_batch_norm=args.use_batch_norm,
                            )
 

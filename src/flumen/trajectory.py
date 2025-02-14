@@ -41,9 +41,10 @@ class RawTrajectoryDataset(Dataset):
             self.init_state[k] = torch.from_numpy(sample["init_state"].reshape(
                 (1, self.state_dim)))
             self.init_state_noise[k] = 0.
+
             self.time.append(
                 torch.from_numpy(sample["time"]).type(
-                    torch.get_default_dtype()).reshape((-1, 1)))
+                    torch.get_default_dtype()).reshape((-1,1)))
 
             self.state.append(
                 torch.from_numpy(sample["state"]).type(
@@ -66,7 +67,7 @@ class RawTrajectoryDataset(Dataset):
             self.control_seq_projected.append(
                 torch.from_numpy(sample["control_projected"]).type(
                     torch.get_default_dtype()).reshape((-1, self.control_dim)))
-            
+        
     @classmethod
     def generate(cls, generator, time_horizon, n_trajectories, n_samples,
                  noise_std):
@@ -138,6 +139,7 @@ class TrajectoryDataset(Dataset):
 
         init_state = []
         state = []
+        time = []
         rnn_input_data = []
         rnn_input_data_projected = []
         seq_len_data = []
@@ -150,7 +152,7 @@ class TrajectoryDataset(Dataset):
         for (x0, x0_n, t, y, y_n,u,u_proj,phi) in raw_data:
             y += y_n
             x0 += x0_n
-
+            
             if max_seq_len == -1:
                 for k_s, y_s in enumerate(y):
                     rnn_input, rnn_input_len = self.process_example(
@@ -166,6 +168,7 @@ class TrajectoryDataset(Dataset):
                     rnn_input_data.append(rnn_input)
                     rnn_input_data_projected.append(rnn_input_proj)
                     Phi.append(phi)
+                    time.append(t[k_s])
 
             else:
                 for k_s, y_s in enumerate(y):
@@ -193,6 +196,7 @@ class TrajectoryDataset(Dataset):
         self.init_state = torch.stack(init_state).type(
             torch.get_default_dtype())
         self.state = torch.stack(state).type(torch.get_default_dtype())
+        self.time = torch.stack(time).type(torch.get_default_dtype())
         self.Phi = torch.stack(Phi).type(torch.get_default_dtype())
         self.rnn_input = torch.stack(rnn_input_data).type(
             torch.get_default_dtype())
@@ -233,5 +237,5 @@ class TrajectoryDataset(Dataset):
         return self.len
 
     def __getitem__(self, index):
-        return (self.init_state[index], self.state[index],
+        return (self.init_state[index], self.state[index],self.time[index],
                 self.rnn_input[index], self.rnn_input_projected[index],self.seq_lens[index],self.Phi[index])

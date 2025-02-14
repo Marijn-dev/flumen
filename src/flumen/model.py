@@ -21,6 +21,7 @@ class CausalFlowModel(nn.Module):
                  use_trunk,
                  trunk_size,
                  use_bias,
+                 use_time,
                  use_batch_norm=False,
                  ):
         super(CausalFlowModel, self).__init__()
@@ -36,6 +37,7 @@ class CausalFlowModel(nn.Module):
         self.trunk_dim = trunk_size 
         self.bias_enabled = use_bias
         self.flow_decoder_dim = 0 # output dimension of the decoder of flow function
+        self.time_enabled = use_time
         x_dnn_osz = control_rnn_depth * control_rnn_size
 
         if self.POD_enabled:
@@ -48,8 +50,11 @@ class CausalFlowModel(nn.Module):
     
         if self.trunk_enabled:
             self.flow_decoder_dim += self.trunk_dim
+            input_trunk = 1
+            if self.time_enabled:
+                input_trunk += 1
             # initialize trunk net
-            self.trunk = Trunk(in_size=1,
+            self.trunk = Trunk(in_size=input_trunk,
                                 out_size=self.trunk_dim,
                                 hidden_size=encoder_depth *
                                 (encoder_size * x_dnn_osz, ), 
@@ -93,7 +98,7 @@ class CausalFlowModel(nn.Module):
             self.bias = nn.Parameter(torch.tensor(0.0))
 
 
-    def forward(self, x, rnn_input, rnn_input_proj,deltas,X_loc,POD):
+    def forward(self, x, rnn_input, rnn_input_proj,deltas,X_loc,t,POD):
 
         # project the inputs to the flow function
         if self.POD_projection_enabled:
@@ -141,14 +146,22 @@ class CausalFlowModel(nn.Module):
 
         # POD
         elif self.POD_enabled:
-            print(POD[:,1:,:self.POD_modes].shape)
             output = torch.einsum("bi,bni->bn", X_func,POD[:,1:,:self.POD_modes] )
 
-        # Trunk
+        # Trunk with time
+        elif self.time_enabled and self.trunk_enabled:
+            t_expanded = t.unsqueeze(1).expand(-1, X_loc.shape[0], -1)  # (batch_size, 100, 1)
+            X_loc_expanded = X_loc.unsqueeze(0).expand(t.shape[0], -1, -1)  # (batch_size, 100, 1)
+            trunk_input = torch.cat((X_loc_expanded, t_expanded), dim=-1) # combine space and time
+           
+            trunk_out = self.trunk(trunk_input)
+            output = torch.einsum("bi, bni -> bn", X_func, trunk_out)  # B = Batch , R = Output features R, L is locations
+            
+        # Trunk without time
         else:
-            X_loc = self.trunk(X_loc)
-            output = torch.einsum("bi, ni -> bn", X_func, X_loc)  # B = Batch , R = Output features R, L is locations
-        
+            trunk_out = self.trunk(X_loc)
+            output = torch.einsum("bi, bni -> bn", X_func, trunk_out)  # B = Batch , R = Output features R, L is locations
+
         # bias
         if self.bias_enabled:
             output += self.bias
