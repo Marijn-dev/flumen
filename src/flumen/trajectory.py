@@ -90,6 +90,23 @@ class RawTrajectoryDataset(Dataset):
         )
 
 
+class ParamaterisedRawTrajectoryDataset(RawTrajectoryDataset):
+    def __init__(self, data, *args, **kwargs):
+        super().__init__(data, *args, **kwargs)
+
+        self.parameter = []
+
+        for k, sample in enumerate(data):
+            self.parameter.append(
+                torch.from_numpy(sample["parameter"])
+                .type(torch.get_default_dtype())
+                .reshape((-1, 1))
+            )
+
+    def __getitem__(self, index):
+        return *super().__getitem__(index), self.parameter[index]
+
+
 class TrajectoryDataset(Dataset):
     def __init__(
         self,
@@ -109,10 +126,9 @@ class TrajectoryDataset(Dataset):
         rnn_input_data = []
         tau_data = []
         seq_len_data = []
-
         rng = np.random.default_rng()
 
-        for x0, t, y, u in raw_data:
+        for x0, t, y, u, *parameter in raw_data:
             if max_seq_len == -1:
                 for k_s, y_s in enumerate(y):
                     rnn_input, tau, rnn_input_len = make_rnn_inputs(
@@ -126,7 +142,6 @@ class TrajectoryDataset(Dataset):
                     seq_len_data.append(rnn_input_len)
                     rnn_input_data.append(rnn_input)
                     tau_data.append(tau)
-
             else:
                 for k_s, y_s in enumerate(y):
                     # find index of last relevant state sample
@@ -180,6 +195,52 @@ class TrajectoryDataset(Dataset):
             self.rnn_input[index],
             self.tau[index],
             self.seq_lens[index],
+        )
+
+
+class ParameterisedTrajectoryDataset(TrajectoryDataset):
+    def __init__(
+        self,
+        raw_data: RawTrajectoryDataset,
+        max_seq_len: int = -1,
+        n_samples: int = 1,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(raw_data, max_seq_len, n_samples, *args, **kwargs)
+
+        parameter_data = []
+        rng = np.random.default_rng()
+
+        for _, t, y, _, parameter in raw_data:
+            if max_seq_len == -1:
+                parameter_data.extend([parameter] * len(y))
+            else:
+                for k_s in range(len(y)):
+                    # find index of last relevant state sample
+                    times = t - t[k_s] - max_seq_len * self.delta
+                    times[times > 0] = 0.0
+                    k_l = times.argmax().item()
+
+                    if k_l == k_s:
+                        end_idxs = (0,)
+                    else:
+                        end_idxs = rng.choice(
+                            k_l - k_s,
+                            size=min(n_samples, k_l - k_s),
+                            replace=False,
+                        )
+
+                    parameter_data.extend([parameter] * len(end_idxs))
+
+        self.parameter = torch.stack(parameter_data).type(
+            torch.get_default_dtype()
+        )
+
+    def __getitem__(self, index):
+        return (
+            *super().__getitem__(index),
+            self.parameter[index],
         )
 
 

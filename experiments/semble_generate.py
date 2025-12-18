@@ -9,7 +9,12 @@ from argparse import ArgumentParser, ArgumentTypeError
 from scipy.signal import find_peaks
 
 from semble import TrajectorySampler, TSamplerSpec, make_trajectory_sampler
-from flumen import RawTrajectoryDataset
+from flumen import (
+    RawTrajectoryDataset,
+    ParamaterisedRawTrajectoryDataset,
+    TrajectoryDataset,
+    ParameterisedTrajectoryDataset,
+)
 
 
 def main():
@@ -175,17 +180,29 @@ def generate(args, trajectory_sampler: TrajectorySampler, postprocess=[]):
     n_train = args.n_trajectories - n_val - n_test
 
     def get_example():
-        x0, t, y, u = trajectory_sampler.get_example(
-            args.time_horizon, args.n_samples
-        )
-        return {
-            "init_state": x0,
-            "time": t,
-            "state": y,
-            "control": u,
-        }
+        if trajectory_sampler._dyn._is_parameterised:
+            x0, t, y, u, parameter = trajectory_sampler.get_example(
+                args.time_horizon, args.n_samples
+            )
+            return {
+                "init_state": x0,
+                "time": t,
+                "state": y,
+                "control": u,
+                "parameter": parameter,
+            }
+        else:
+            x0, t, y, u = trajectory_sampler.get_example(
+                args.time_horizon, args.n_samples
+            )
+            return {
+                "init_state": x0,
+                "time": t,
+                "state": y,
+                "control": u,
+            }
 
-    train_data = [get_example() for _ in range(n_train)]
+    train_data_ = [get_example() for _ in range(n_train)]
     trajectory_sampler.reset_rngs()
 
     val_data = [get_example() for _ in range(n_val)]
@@ -193,15 +210,22 @@ def generate(args, trajectory_sampler: TrajectorySampler, postprocess=[]):
 
     test_data = [get_example() for _ in range(n_test)]
 
-    train_data = RawTrajectoryDataset(
-        train_data,
+    DatasetMapping = {
+        True: ParamaterisedRawTrajectoryDataset,
+        False: RawTrajectoryDataset,
+    }
+
+    RawDataset = DatasetMapping[trajectory_sampler._dyn._is_parameterised]
+
+    train_data = RawDataset(
+        train_data_,
         *trajectory_sampler.dims(),
         delta=trajectory_sampler._delta,
         output_mask=trajectory_sampler._dyn.mask,
         noise_std=args.noise_std,
     )
 
-    val_data = RawTrajectoryDataset(
+    val_data = RawDataset(
         val_data,
         *trajectory_sampler.dims(),
         delta=trajectory_sampler._delta,
@@ -209,14 +233,14 @@ def generate(args, trajectory_sampler: TrajectorySampler, postprocess=[]):
         noise_std=args.noise_std,
     )
 
-    test_data = RawTrajectoryDataset(
+    test_data = RawDataset(
         test_data,
         *trajectory_sampler.dims(),
         delta=trajectory_sampler._delta,
         output_mask=trajectory_sampler._dyn.mask,
         noise_std=args.noise_std,
     )
-
+    
     for d in (train_data, val_data, test_data):
         for p in postprocess:
             p(d)
