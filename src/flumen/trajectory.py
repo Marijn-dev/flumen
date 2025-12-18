@@ -28,6 +28,7 @@ class RawTrajectoryDataset(Dataset):
         output_mask: tuple[int, ...],
         noise_std: float = 0.0,
     ):
+        self.is_parameterised = False
         self.n_traj = len(data)
         self.state_dim = state_dim
         self.control_dim = control_dim
@@ -94,13 +95,14 @@ class ParamaterisedRawTrajectoryDataset(RawTrajectoryDataset):
     def __init__(self, data, *args, **kwargs):
         super().__init__(data, *args, **kwargs)
 
+        self.is_parameterised = True
         self.parameter = []
 
         for k, sample in enumerate(data):
             self.parameter.append(
                 torch.from_numpy(sample["parameter"])
                 .type(torch.get_default_dtype())
-                .reshape((-1, 1))
+                .reshape(-1)
             )
 
     def __getitem__(self, index):
@@ -128,7 +130,7 @@ class TrajectoryDataset(Dataset):
         seq_len_data = []
         rng = np.random.default_rng()
 
-        for x0, t, y, u, *parameter in raw_data:
+        for x0, t, y, u, *_ in raw_data:
             if max_seq_len == -1:
                 for k_s, y_s in enumerate(y):
                     rnn_input, tau, rnn_input_len = make_rnn_inputs(
@@ -211,7 +213,6 @@ class ParameterisedTrajectoryDataset(TrajectoryDataset):
 
         parameter_data = []
         rng = np.random.default_rng()
-
         for _, t, y, _, parameter in raw_data:
             if max_seq_len == -1:
                 parameter_data.extend([parameter] * len(y))
