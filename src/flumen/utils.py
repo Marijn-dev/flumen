@@ -40,11 +40,13 @@ def get_batch_inputs_packed(x0, t, u, delta: float):
     return x0, rnn_input, tau
 
 
-def pack_model_inputs(x0, t, u, delta: float):
+def pack_model_inputs(x0, t, u, delta: float, parameter=None):
     t = torch.Tensor(t)
     x0 = torch.Tensor(x0)
     u = torch.Tensor(u)
-
+    parameter = (
+        torch.Tensor(parameter).unsqueeze(0) if parameter is not None else None
+    )
     if x0.ndim < 2:
         x0 = x0.unsqueeze(0)
         u = u.unsqueeze(0)
@@ -52,4 +54,4 @@ def pack_model_inputs(x0, t, u, delta: float):
     skips = torch.floor(t / delta).long()
     tau = (t - delta * skips) / delta
 
-    return x0, u, skips.squeeze(), tau
+    return x0, u, skips.squeeze(), tau, parameter

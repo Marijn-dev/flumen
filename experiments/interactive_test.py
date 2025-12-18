@@ -91,17 +91,26 @@ def main():
 
     while True:
         time_integrate = time()
-        x0, t, y, u = sampler.get_example(
-            time_horizon=time_horizon, n_samples=int(1 + 3 * time_horizon)
-        )
-
+        if sampler._dyn._is_parameterised:
+            x0, t, y, u, parameter = sampler.get_example(
+                time_horizon=time_horizon, n_samples=int(1 + 3 * time_horizon)
+            )
+        else:
+            x0, t, y, u = sampler.get_example(
+                time_horizon=time_horizon, n_samples=int(1 + 3 * time_horizon)
+            )
+            parameter = None
         time_integrate = time() - time_integrate
 
         with torch.no_grad():
             time_predict = time()
 
-            x0_feed, u_feed, skips, tau = pack_model_inputs(x0, t, u, delta)
-            y_pred = model.forward_trajectory(x0_feed, u_feed, skips, tau)
+            x0_feed, u_feed, skips, tau, parameter = pack_model_inputs(
+                x0, t, u, delta, parameter
+            )
+            y_pred = model.forward_trajectory(
+                x0_feed, u_feed, skips, tau, parameter
+            )
 
             time_predict = time() - time_predict
 

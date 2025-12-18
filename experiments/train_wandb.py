@@ -3,14 +3,21 @@ from torch.utils.data import DataLoader
 
 torch.set_default_dtype(torch.float32)
 
-import pickle, yaml
+import pickle
+import yaml
 from pathlib import Path
 
-from flumen import CausalFlowModel, print_gpu_info, TrajectoryDataset
+from flumen import (
+    CausalFlowModel,
+    print_gpu_info,
+    TrajectoryDataset,
+    ParameterisedTrajectoryDataset,
+)
 from flumen.train import EarlyStopping, train_step, validate
 
 from argparse import ArgumentParser
-import datetime, time
+import datetime
+import time
 import re
 from sys import stderr
 
@@ -93,9 +100,16 @@ def main():
     with data_path.open("rb") as f:
         data = pickle.load(f)
 
-    train_data = TrajectoryDataset(data["train"])
-    val_data = TrajectoryDataset(data["val"])
-    test_data = TrajectoryDataset(data["test"])
+    DatasetMapping = {
+        True: ParameterisedTrajectoryDataset,
+        False: TrajectoryDataset,
+    }
+
+    Dataset = DatasetMapping[data["train"].is_parameterised]
+
+    train_data = Dataset(data["train"])
+    val_data = Dataset(data["val"])
+    test_data = Dataset(data["test"])
 
     model_args = {
         "state_dim": train_data.state_dim,
@@ -107,6 +121,7 @@ def main():
         "encoder_depth": wandb.config["encoder_depth"],
         "decoder_size": wandb.config["decoder_size"],
         "decoder_depth": wandb.config["decoder_depth"],
+        "use_parameter": data["train"].is_parameterised,
         "use_batch_norm": False,
     }
 

@@ -14,10 +14,12 @@ class CausalFlowModel(nn.Module):
         encoder_depth,
         decoder_size,
         decoder_depth,
+        use_parameter,
         use_batch_norm=False,
     ):
         super(CausalFlowModel, self).__init__()
 
+        self.use_parameter = use_parameter
         self.state_dim = state_dim
         self.control_dim = control_dim
         self.output_dim = output_dim
@@ -40,6 +42,13 @@ class CausalFlowModel(nn.Module):
             use_batch_norm=use_batch_norm,
         )
 
+        self.x_param_dnn = FFNet(
+            in_size=state_dim + 1,
+            out_size=x_dnn_osz,
+            hidden_size=encoder_depth * (encoder_size * x_dnn_osz,),
+            use_batch_norm=use_batch_norm,
+        )
+
         u_dnn_isz = control_rnn_size
         self.u_dnn = FFNet(
             in_size=u_dnn_isz,
@@ -48,8 +57,12 @@ class CausalFlowModel(nn.Module):
             use_batch_norm=use_batch_norm,
         )
 
-    def forward(self, x, rnn_input, tau):
-        h0 = self.x_dnn(x)
+    def forward(self, x, rnn_input, tau, parameter=None):
+        if self.use_parameter:
+            h0 = self.x_param_dnn(torch.cat((x, parameter), dim=1))
+        else:
+            h0 = self.x_dnn(x)
+
         h0 = torch.stack(h0.split(self.control_rnn_size, dim=1))
         c0 = torch.zeros_like(h0)
 
@@ -71,10 +84,19 @@ class CausalFlowModel(nn.Module):
 
         return output
 
-    def forward_trajectory(self, x, u, skips, tau):
-        h0 = torch.stack(
-            torch.split(self.x_dnn(x), self.control_rnn_size, dim=1)
-        )
+    def forward_trajectory(self, x, u, skips, tau, parameter=None):
+        if self.use_parameter:
+            h0 = torch.stack(
+                torch.split(
+                    self.x_param_dnn(torch.cat((x, parameter), dim=1)),
+                    self.control_rnn_size,
+                    dim=1,
+                )
+            )
+        else:
+            h0 = torch.stack(
+                torch.split(self.x_dnn(x), self.control_rnn_size, dim=1)
+            )
 
         lstm_depth = h0.shape[0]
         batch_size = h0.shape[1]
