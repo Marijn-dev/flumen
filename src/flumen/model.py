@@ -8,6 +8,7 @@ class CausalFlowModel(nn.Module):
         state_dim,
         control_dim,
         output_dim,
+        parameter_dim,
         control_rnn_size,
         control_rnn_depth,
         encoder_size,
@@ -35,15 +36,15 @@ class CausalFlowModel(nn.Module):
         )
 
         x_dnn_osz = control_rnn_depth * control_rnn_size
-        self.x_dnn = FFNet(
+        self.x_dnn_init_state = FFNet(  # without parameter
             in_size=state_dim,
             out_size=x_dnn_osz,
             hidden_size=encoder_depth * (encoder_size * x_dnn_osz,),
             use_batch_norm=use_batch_norm,
         )
 
-        self.x_param_dnn = FFNet(
-            in_size=state_dim + 1,
+        self.x_dnn_init_state_parameter = FFNet(
+            in_size=state_dim + parameter_dim,  # with parameter
             out_size=x_dnn_osz,
             hidden_size=encoder_depth * (encoder_size * x_dnn_osz,),
             use_batch_norm=use_batch_norm,
@@ -59,9 +60,11 @@ class CausalFlowModel(nn.Module):
 
     def forward(self, x, rnn_input, tau, parameter=None):
         if self.use_parameter:
-            h0 = self.x_param_dnn(torch.cat((x, parameter), dim=1))
+            h0 = self.x_dnn_init_state_parameter(
+                torch.cat((x, parameter), dim=1)
+            )
         else:
-            h0 = self.x_dnn(x)
+            h0 = self.x_dnn_init_state(x)
 
         h0 = torch.stack(h0.split(self.control_rnn_size, dim=1))
         c0 = torch.zeros_like(h0)

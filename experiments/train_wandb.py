@@ -1,12 +1,3 @@
-import torch
-from torch.utils.data import DataLoader
-
-torch.set_default_dtype(torch.float32)
-
-import pickle
-import yaml
-from pathlib import Path
-
 from flumen import (
     CausalFlowModel,
     print_gpu_info,
@@ -14,14 +5,21 @@ from flumen import (
     ParameterisedTrajectoryDataset,
 )
 from flumen.train import EarlyStopping, train_step, validate
-
+from pathlib import Path
+from torch.utils.data import DataLoader
 from argparse import ArgumentParser
+from sys import stderr
+
 import datetime
 import time
 import re
-from sys import stderr
-
+import torch
+import pickle
+import yaml
 import wandb
+
+torch.set_default_dtype(torch.float32)
+
 
 hyperparams = {
     "control_rnn_size": 64,
@@ -115,6 +113,7 @@ def main():
         "state_dim": train_data.state_dim,
         "control_dim": train_data.control_dim,
         "output_dim": train_data.output_dim,
+        "parameter_dim": train_data.parameter_dim,
         "control_rnn_size": wandb.config["control_rnn_size"],
         "control_rnn_depth": wandb.config["control_rnn_depth"],
         "encoder_size": wandb.config["encoder_size"],

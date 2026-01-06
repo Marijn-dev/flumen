@@ -1,20 +1,17 @@
-import torch
-
-torch.set_default_dtype(torch.float32)
-
-import pickle, yaml
-from pathlib import Path
-from argparse import ArgumentParser, ArgumentTypeError
-
-from scipy.signal import find_peaks
-
-from semble import TrajectorySampler, TSamplerSpec, make_trajectory_sampler
 from flumen import (
     RawTrajectoryDataset,
     ParamaterisedRawTrajectoryDataset,
-    TrajectoryDataset,
-    ParameterisedTrajectoryDataset,
 )
+from semble import TrajectorySampler, TSamplerSpec, make_trajectory_sampler
+from argparse import ArgumentParser, ArgumentTypeError
+from pathlib import Path
+from scipy.signal import find_peaks
+
+import pickle
+import yaml
+import torch
+
+torch.set_default_dtype(torch.float32)
 
 
 def main():
@@ -219,7 +216,7 @@ def generate(args, trajectory_sampler: TrajectorySampler, postprocess=[]):
 
     train_data = RawDataset(
         train_data_,
-        *trajectory_sampler.dims(),
+        trajectory_sampler.dims(),
         delta=trajectory_sampler._delta,
         output_mask=trajectory_sampler._dyn.mask,
         noise_std=args.noise_std,
@@ -227,7 +224,7 @@ def generate(args, trajectory_sampler: TrajectorySampler, postprocess=[]):
 
     val_data = RawDataset(
         val_data,
-        *trajectory_sampler.dims(),
+        trajectory_sampler.dims(),
         delta=trajectory_sampler._delta,
         output_mask=trajectory_sampler._dyn.mask,
         noise_std=args.noise_std,
@@ -235,12 +232,12 @@ def generate(args, trajectory_sampler: TrajectorySampler, postprocess=[]):
 
     test_data = RawDataset(
         test_data,
-        *trajectory_sampler.dims(),
+        trajectory_sampler.dims(),
         delta=trajectory_sampler._delta,
         output_mask=trajectory_sampler._dyn.mask,
         noise_std=args.noise_std,
     )
-    
+
     for d in (train_data, val_data, test_data):
         for p in postprocess:
             p(d)

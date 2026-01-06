@@ -21,18 +21,14 @@ class RawTrajectoryDataset(Dataset):
     def __init__(
         self,
         data: list[dict],
-        state_dim: int,
-        control_dim: int,
-        output_dim: int,
+        dims: tuple[int, int, int],
         delta: float,
         output_mask: tuple[int, ...],
         noise_std: float = 0.0,
     ):
         self.is_parameterised = False
         self.n_traj = len(data)
-        self.state_dim = state_dim
-        self.control_dim = control_dim
-        self.output_dim = output_dim
+        self.state_dim, self.control_dim, self.output_dim = dims
         self.delta = delta
         self.mask = output_mask
 
@@ -92,17 +88,19 @@ class RawTrajectoryDataset(Dataset):
 
 
 class ParamaterisedRawTrajectoryDataset(RawTrajectoryDataset):
-    def __init__(self, data, *args, **kwargs):
-        super().__init__(data, *args, **kwargs)
+    def __init__(
+        self, data: list[dict], dims: tuple[int, int, int, int], *args, **kwargs
+    ):
+        _, _, _, self.parameter_dim = dims
+        super().__init__(data, dims[:-1], *args, **kwargs)
 
         self.is_parameterised = True
-        self.parameter = []
-
+        self.parameter = torch.empty((self.n_traj, self.parameter_dim)).type(
+            torch.get_default_dtype()
+        )
         for k, sample in enumerate(data):
-            self.parameter.append(
-                torch.from_numpy(sample["parameter"])
-                .type(torch.get_default_dtype())
-                .reshape(-1)
+            self.parameter[k] = torch.from_numpy(
+                sample["parameter"].reshape((1, self.parameter_dim))
             )
 
     def __getitem__(self, index):
@@ -112,13 +110,14 @@ class ParamaterisedRawTrajectoryDataset(RawTrajectoryDataset):
 class TrajectoryDataset(Dataset):
     def __init__(
         self,
-        raw_data: RawTrajectoryDataset,
+        raw_data: RawTrajectoryDataset | ParamaterisedRawTrajectoryDataset,
         max_seq_len: int = -1,
         n_samples: int = 1,
     ):
         self.state_dim = raw_data.state_dim
         self.control_dim = raw_data.control_dim
         self.output_dim = raw_data.output_dim
+        self.parameter_dim = 0
         self.delta = raw_data.delta
 
         mask = tuple(bool(v) for v in raw_data.mask)
@@ -203,14 +202,14 @@ class TrajectoryDataset(Dataset):
 class ParameterisedTrajectoryDataset(TrajectoryDataset):
     def __init__(
         self,
-        raw_data: RawTrajectoryDataset,
+        raw_data: ParamaterisedRawTrajectoryDataset,
         max_seq_len: int = -1,
         n_samples: int = 1,
         *args,
         **kwargs,
     ):
         super().__init__(raw_data, max_seq_len, n_samples, *args, **kwargs)
-
+        self.parameter_dim = raw_data.parameter_dim
         parameter_data = []
         rng = np.random.default_rng()
         for _, t, y, _, parameter in raw_data:
