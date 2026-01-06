@@ -4,15 +4,16 @@ dynamics:
     parameter_generator:
       name: Product
       args:
+        # tau
         - name: Uniform
           args:
             low: 0.65
             high: 0.95
+        # a
         - name: Uniform
           args: 
             low: -0.40
             high: -0.20
-    # a: -0.3
     b: 1.4
 sequence_generator:
   name: LogNormalSqWave
