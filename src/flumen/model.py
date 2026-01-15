@@ -91,14 +91,20 @@ class CausalFlowModel(nn.Module):
         if self.use_parameter:
             h0 = torch.stack(
                 torch.split(
-                    self.x_param_dnn(torch.cat((x, parameter), dim=1)),
+                    self.x_dnn_init_state_parameter(
+                        torch.cat((x, parameter), dim=1)
+                    ),
                     self.control_rnn_size,
                     dim=1,
                 )
             )
         else:
             h0 = torch.stack(
-                torch.split(self.x_dnn(x), self.control_rnn_size, dim=1)
+                torch.split(
+                    self.x_dnn_init_state_parameter(x),
+                    self.control_rnn_size,
+                    dim=1,
+                )
             )
 
         lstm_depth = h0.shape[0]
