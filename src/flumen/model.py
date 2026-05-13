@@ -8,19 +8,16 @@ class CausalFlowModel(nn.Module):
         state_dim,
         control_dim,
         output_dim,
-        parameter_dim,
         control_rnn_size,
         control_rnn_depth,
         encoder_size,
         encoder_depth,
         decoder_size,
         decoder_depth,
-        use_parameter,
         use_batch_norm=False,
     ):
         super(CausalFlowModel, self).__init__()
 
-        self.use_parameter = use_parameter
         self.state_dim = state_dim
         self.control_dim = control_dim
         self.output_dim = output_dim
@@ -36,15 +33,8 @@ class CausalFlowModel(nn.Module):
         )
 
         x_dnn_osz = control_rnn_depth * control_rnn_size
-        self.x_dnn_init_state = FFNet(  # without parameter
+        self.x_dnn_init_state = FFNet(
             in_size=state_dim,
-            out_size=x_dnn_osz,
-            hidden_size=encoder_depth * (encoder_size * x_dnn_osz,),
-            use_batch_norm=use_batch_norm,
-        )
-
-        self.x_dnn_init_state_parameter = FFNet(
-            in_size=state_dim + parameter_dim,  # with parameter
             out_size=x_dnn_osz,
             hidden_size=encoder_depth * (encoder_size * x_dnn_osz,),
             use_batch_norm=use_batch_norm,
@@ -58,14 +48,9 @@ class CausalFlowModel(nn.Module):
             use_batch_norm=use_batch_norm,
         )
 
-    def forward(self, x, rnn_input, tau, parameter=None):
-        if self.use_parameter:
-            h0 = self.x_dnn_init_state_parameter(
-                torch.cat((x, parameter), dim=1)
-            )
-        else:
-            h0 = self.x_dnn_init_state(x)
+    def forward(self, x, rnn_input, tau):
 
+        h0 = self.x_dnn_init_state(x)
         h0 = torch.stack(h0.split(self.control_rnn_size, dim=1))
         c0 = torch.zeros_like(h0)
 
@@ -87,66 +72,54 @@ class CausalFlowModel(nn.Module):
 
         return output
 
-    def forward_trajectory(self, x, u, skips, tau, parameter=None):
-        if self.use_parameter:
-            h0 = torch.stack(
-                torch.split(
-                    self.x_dnn_init_state_parameter(
-                        torch.cat((x, parameter), dim=1)
-                    ),
-                    self.control_rnn_size,
-                    dim=1,
-                )
-            )
-        else:
-            h0 = torch.stack(
-                torch.split(
-                    self.x_dnn_init_state_parameter(x),
-                    self.control_rnn_size,
-                    dim=1,
-                )
-            )
 
-        lstm_depth = h0.shape[0]
-        batch_size = h0.shape[1]
-        hsz = h0.shape[-1]
-
-        h = [h0]
-        c = [torch.zeros_like(h0)]
-
-        rnn_input = torch.cat(
-            (u, torch.ones((batch_size, u.shape[1], 1), device=u.device)),
-            dim=-1,
+def forward_trajectory(self, x, u, skips, tau):
+    h0 = torch.stack(
+        torch.split(
+            self.x_dnn_init_state(x),
+            self.control_rnn_size,
+            dim=1,
         )
+    )
 
-        for k in range(skips[-1]):
-            _, (h_next, c_next) = self.u_rnn(
-                rnn_input[:, k].unsqueeze(1), (h[k], c[k])
-            )
-            h.append(h_next)
-            c.append(c_next)
+    lstm_depth = h0.shape[0]
+    batch_size = h0.shape[1]
+    hsz = h0.shape[-1]
 
-        tau = tau.unsqueeze(0).expand(batch_size, -1, -1)
-        rnn_input = torch.cat((u[:, skips], tau), dim=-1).view(
-            -1, 1 + u.shape[-1]
+    h = [h0]
+    c = [torch.zeros_like(h0)]
+
+    rnn_input = torch.cat(
+        (u, torch.ones((batch_size, u.shape[1], 1), device=u.device)),
+        dim=-1,
+    )
+
+    for k in range(skips[-1]):
+        _, (h_next, c_next) = self.u_rnn(
+            rnn_input[:, k].unsqueeze(1), (h[k], c[k])
         )
+        h.append(h_next)
+        c.append(c_next)
 
-        h = torch.stack(h, dim=2)
-        c = torch.stack(c, dim=2)
+    tau = tau.unsqueeze(0).expand(batch_size, -1, -1)
+    rnn_input = torch.cat((u[:, skips], tau), dim=-1).view(-1, 1 + u.shape[-1])
 
-        h_prev, c_prev = h[:, :, skips], c[:, :, skips]
-        h_prev = h_prev.view(lstm_depth, -1, hsz)
-        c_prev = c_prev.view(lstm_depth, -1, hsz)
+    h = torch.stack(h, dim=2)
+    c = torch.stack(c, dim=2)
 
-        _, (h_last, _) = self.u_rnn(rnn_input.unsqueeze(1), (h_prev, c_prev))
+    h_prev, c_prev = h[:, :, skips], c[:, :, skips]
+    h_prev = h_prev.view(lstm_depth, -1, hsz)
+    c_prev = c_prev.view(lstm_depth, -1, hsz)
 
-        h_prev = h_prev[-1].view(batch_size, -1, hsz)
-        h_last = h_last[-1].view(batch_size, -1, hsz)
+    _, (h_last, _) = self.u_rnn(rnn_input.unsqueeze(1), (h_prev, c_prev))
 
-        z = (1 - tau) * h_prev + tau * h_last
-        output = self.u_dnn(z).squeeze()
+    h_prev = h_prev[-1].view(batch_size, -1, hsz)
+    h_last = h_last[-1].view(batch_size, -1, hsz)
 
-        return output
+    z = (1 - tau) * h_prev + tau * h_last
+    output = self.u_dnn(z).squeeze()
+
+    return output
 
 
 class FFNet(nn.Module):

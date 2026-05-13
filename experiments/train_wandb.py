@@ -2,8 +2,8 @@ from flumen import (
     CausalFlowModel,
     print_gpu_info,
     TrajectoryDataset,
-    ParameterisedTrajectoryDataset,
 )
+
 from flumen.train import EarlyStopping, train_step, validate
 from pathlib import Path
 from torch.utils.data import DataLoader
@@ -98,29 +98,20 @@ def main():
     with data_path.open("rb") as f:
         data = pickle.load(f)
 
-    DatasetMapping = {
-        True: ParameterisedTrajectoryDataset,
-        False: TrajectoryDataset,
-    }
-
-    Dataset = DatasetMapping[data["train"].is_parameterised]
-
-    train_data = Dataset(data["train"])
-    val_data = Dataset(data["val"])
-    test_data = Dataset(data["test"])
+    train_data = TrajectoryDataset(data["train"])
+    val_data = TrajectoryDataset(data["val"])
+    test_data = TrajectoryDataset(data["test"])
 
     model_args = {
         "state_dim": train_data.state_dim,
         "control_dim": train_data.control_dim,
         "output_dim": train_data.output_dim,
-        "parameter_dim": train_data.parameter_dim,
         "control_rnn_size": wandb.config["control_rnn_size"],
         "control_rnn_depth": wandb.config["control_rnn_depth"],
         "encoder_size": wandb.config["encoder_size"],
         "encoder_depth": wandb.config["encoder_depth"],
         "decoder_size": wandb.config["decoder_size"],
         "decoder_depth": wandb.config["decoder_depth"],
-        "use_parameter": data["train"].is_parameterised,
         "use_batch_norm": False,
     }
 

@@ -1,6 +1,5 @@
 from flumen import (
     RawTrajectoryDataset,
-    ParamaterisedRawTrajectoryDataset,
 )
 from semble import TrajectorySampler, TSamplerSpec, make_trajectory_sampler
 from argparse import ArgumentParser, ArgumentTypeError
@@ -207,14 +206,7 @@ def generate(args, trajectory_sampler: TrajectorySampler, postprocess=[]):
 
     test_data = [get_example() for _ in range(n_test)]
 
-    DatasetMapping = {
-        True: ParamaterisedRawTrajectoryDataset,
-        False: RawTrajectoryDataset,
-    }
-
-    RawDataset = DatasetMapping[trajectory_sampler._dyn._is_parameterised]
-
-    train_data = RawDataset(
+    train_data = RawTrajectoryDataset(
         train_data_,
         trajectory_sampler.dims(),
         delta=trajectory_sampler._delta,
@@ -222,7 +214,7 @@ def generate(args, trajectory_sampler: TrajectorySampler, postprocess=[]):
         noise_std=args.noise_std,
     )
 
-    val_data = RawDataset(
+    val_data = RawTrajectoryDataset(
         val_data,
         trajectory_sampler.dims(),
         delta=trajectory_sampler._delta,
@@ -230,7 +222,7 @@ def generate(args, trajectory_sampler: TrajectorySampler, postprocess=[]):
         noise_std=args.noise_std,
     )
 
-    test_data = RawDataset(
+    test_data = RawTrajectoryDataset(
         test_data,
         trajectory_sampler.dims(),
         delta=trajectory_sampler._delta,

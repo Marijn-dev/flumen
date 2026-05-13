@@ -10,6 +10,7 @@ class RawTrajectoryDataset(Dataset):
     state_dim: int
     control_dim: int
     output_dim: int
+    parameter_dim: int
     mask: tuple[int, ...]
     init_state: Tensor
     init_state_noise: Tensor
@@ -26,18 +27,24 @@ class RawTrajectoryDataset(Dataset):
         output_mask: tuple[int, ...],
         noise_std: float = 0.0,
     ):
-        self.is_parameterised = False
         self.n_traj = len(data)
-        self.state_dim, self.control_dim, self.output_dim = dims
+        (
+            self.state_dim,
+            self.control_dim,
+            self.output_dim,
+            self.parameter_dim,
+        ) = dims
+        self.is_parameterised = self.parameter_dim > 0
+
         self.delta = delta
         self.mask = output_mask
 
-        self.init_state = torch.empty((self.n_traj, self.state_dim)).type(
-            torch.get_default_dtype()
-        )
-        self.init_state_noise = torch.empty((self.n_traj, self.state_dim)).type(
-            torch.get_default_dtype()
-        )
+        self.init_state = torch.empty(
+            (self.n_traj, self.state_dim + self.parameter_dim)
+        ).type(torch.get_default_dtype())
+        self.init_state_noise = torch.empty(
+            (self.n_traj, self.state_dim + self.parameter_dim)
+        ).type(torch.get_default_dtype())
 
         self.time = []
         self.state = []
@@ -45,9 +52,25 @@ class RawTrajectoryDataset(Dataset):
         self.control_seq = []
 
         for k, sample in enumerate(data):
-            self.init_state[k] = torch.from_numpy(
-                sample["init_state"].reshape((1, self.state_dim))
-            )
+            # parameter
+            if self.parameter_dim > 0:
+                self.init_state[k] = torch.cat(
+                    [
+                        torch.from_numpy(
+                            sample["init_state"].reshape((1, self.state_dim))
+                        ),
+                        torch.from_numpy(
+                            sample["parameter"].reshape((1, self.parameter_dim))
+                        ),
+                    ],
+                    dim=-1,
+                )
+
+            # no parameter
+            else:
+                self.init_state[k] = torch.from_numpy(
+                    sample["init_state"].reshape((1, self.state_dim))
+                )
 
             self.init_state_noise[k] = 0.0
 
@@ -87,37 +110,16 @@ class RawTrajectoryDataset(Dataset):
         )
 
 
-class ParamaterisedRawTrajectoryDataset(RawTrajectoryDataset):
-    def __init__(
-        self, data: list[dict], dims: tuple[int, int, int, int], *args, **kwargs
-    ):
-        _, _, _, self.parameter_dim = dims
-        super().__init__(data, dims[:-1], *args, **kwargs)
-
-        self.is_parameterised = True
-        self.parameter = torch.empty((self.n_traj, self.parameter_dim)).type(
-            torch.get_default_dtype()
-        )
-        for k, sample in enumerate(data):
-            self.parameter[k] = torch.from_numpy(
-                sample["parameter"].reshape((1, self.parameter_dim))
-            )
-
-    def __getitem__(self, index):
-        return *super().__getitem__(index), self.parameter[index]
-
-
 class TrajectoryDataset(Dataset):
     def __init__(
         self,
-        raw_data: RawTrajectoryDataset | ParamaterisedRawTrajectoryDataset,
+        raw_data: RawTrajectoryDataset,
         max_seq_len: int = -1,
         n_samples: int = 1,
     ):
-        self.state_dim = raw_data.state_dim
+        self.state_dim = raw_data.state_dim + raw_data.parameter_dim
         self.control_dim = raw_data.control_dim
         self.output_dim = raw_data.output_dim
-        self.parameter_dim = 0
         self.delta = raw_data.delta
 
         mask = tuple(bool(v) for v in raw_data.mask)
@@ -129,7 +131,7 @@ class TrajectoryDataset(Dataset):
         seq_len_data = []
         rng = np.random.default_rng()
 
-        for x0, t, y, u, *_ in raw_data:
+        for x0, t, y, u in raw_data:
             if max_seq_len == -1:
                 for k_s, y_s in enumerate(y):
                     rnn_input, tau, rnn_input_len = make_rnn_inputs(
@@ -196,51 +198,6 @@ class TrajectoryDataset(Dataset):
             self.rnn_input[index],
             self.tau[index],
             self.seq_lens[index],
-        )
-
-
-class ParameterisedTrajectoryDataset(TrajectoryDataset):
-    def __init__(
-        self,
-        raw_data: ParamaterisedRawTrajectoryDataset,
-        max_seq_len: int = -1,
-        n_samples: int = 1,
-        *args,
-        **kwargs,
-    ):
-        super().__init__(raw_data, max_seq_len, n_samples, *args, **kwargs)
-        self.parameter_dim = raw_data.parameter_dim
-        parameter_data = []
-        rng = np.random.default_rng()
-        for _, t, y, _, parameter in raw_data:
-            if max_seq_len == -1:
-                parameter_data.extend([parameter] * len(y))
-            else:
-                for k_s in range(len(y)):
-                    # find index of last relevant state sample
-                    times = t - t[k_s] - max_seq_len * self.delta
-                    times[times > 0] = 0.0
-                    k_l = times.argmax().item()
-
-                    if k_l == k_s:
-                        end_idxs = (0,)
-                    else:
-                        end_idxs = rng.choice(
-                            k_l - k_s,
-                            size=min(n_samples, k_l - k_s),
-                            replace=False,
-                        )
-
-                    parameter_data.extend([parameter] * len(end_idxs))
-
-        self.parameter = torch.stack(parameter_data).type(
-            torch.get_default_dtype()
-        )
-
-    def __getitem__(self, index):
-        return (
-            *super().__getitem__(index),
-            self.parameter[index],
         )
 
 
