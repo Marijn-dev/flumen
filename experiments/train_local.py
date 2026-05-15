@@ -39,6 +39,8 @@ TRAIN_CONFIG = {
     "sched_patience": 10,
     "sched_factor": 2,
     "loss": "mse",
+    "torch_seed": 3520756,
+    "model_key_seed": 354098144,
 }
 
 
@@ -96,6 +98,9 @@ def main():
     with open(model_save_dir / "metadata.yaml", "w") as f:
         yaml.dump(model_metadata, f)
 
+    seed = TRAIN_CONFIG.get("model_key_seed", 0)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     model = CausalFlowModel(**model_args)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -116,8 +121,12 @@ def main():
     )
 
     bs = TRAIN_CONFIG["batch_size"]
-    train_dl = DataLoader(train_data, batch_size=bs, shuffle=True)
-    val_dl = DataLoader(val_data, batch_size=bs, shuffle=True)
+
+    seed = TRAIN_CONFIG.get("torch_seed", 0)
+    g = torch.Generator()
+    g.manual_seed(seed)
+    train_dl = DataLoader(train_data, batch_size=bs, shuffle=True, generator=g)
+    val_dl = DataLoader(val_data, batch_size=bs, shuffle=True, generator=g)
 
     # Evaluate initial loss
     model.eval()
