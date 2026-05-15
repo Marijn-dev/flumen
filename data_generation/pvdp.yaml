@@ -1,5 +1,5 @@
 dynamics:
-  name: VanDerPolParameterised
+  name: ParameterisedVanDerPol
   args:
     parameter_generator:
       name: Uniform
