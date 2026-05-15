@@ -1,7 +1,13 @@
 from flumen import (
     CausalFlowModel,
-    print_gpu_info,
     TrajectoryDataset,
+)
+from flumen.utils import (
+    print_header,
+    print_losses,
+    get_loss,
+    get_timestamp,
+    print_gpu_info,
 )
 
 from flumen.train import EarlyStopping, train_step, validate
@@ -10,7 +16,6 @@ from torch.utils.data import DataLoader
 from argparse import ArgumentParser
 from sys import stderr
 
-import datetime
 import time
 import re
 import torch
@@ -37,38 +42,6 @@ TRAIN_CONFIG = {
     "sched_factor": 2,
     "loss": "mse",
 }
-
-
-def get_loss(which):
-    if which == "mse":
-        return torch.nn.MSELoss()
-    elif which == "l1":
-        return torch.nn.L1Loss()
-    else:
-        raise ValueError(f"Unknown loss {which}.")
-
-
-def print_header():
-    header_msg = (
-        f"{'Epoch':>5} :: {'Loss (Train)':>16} :: "
-        f"{'Loss (Val)':>16} :: {'Best (Val)':>16}"
-    )
-
-    print(header_msg)
-    print("=" * len(header_msg))
-
-
-def print_losses(epoch: int, train: float, val: float, best_val_yet: float):
-    print(
-        f"{epoch + 1:>5d} :: {train:>16e} :: {val:>16e} :: {best_val_yet:>16e}"
-    )
-
-
-def get_timestamp() -> str:
-    now = datetime.datetime.now(tz=datetime.timezone.utc)
-    ts = now.strftime("%y%m%d_%H%M")
-
-    return ts
 
 
 def main():
