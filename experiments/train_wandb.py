@@ -21,7 +21,7 @@ import wandb
 torch.set_default_dtype(torch.float32)
 
 
-hyperparams = {
+TRAIN_CONFIG = {
     "control_rnn_size": 64,
     "control_rnn_depth": 1,
     "encoder_size": 1,
@@ -30,7 +30,7 @@ hyperparams = {
     "decoder_depth": 2,
     "batch_size": 128,
     "lr": 7e-4,
-    "n_epochs": 2000,
+    "n_epochs": 5,
     "es_patience": 20,
     "es_delta": 5e-5,
     "sched_patience": 10,
@@ -51,19 +51,16 @@ def get_loss(which):
 def print_header():
     header_msg = (
         f"{'Epoch':>5} :: {'Loss (Train)':>16} :: "
-        f"{'Loss (Val)':>16} :: {'Loss (Test)':>16} :: {'Best (Val)':>16}"
+        f"{'Loss (Val)':>16} :: {'Best (Val)':>16}"
     )
 
     print(header_msg)
     print("=" * len(header_msg))
 
 
-def print_losses(
-    epoch: int, train: float, val: float, test: float, best_val_yet: float
-):
+def print_losses(epoch: int, train: float, val: float, best_val_yet: float):
     print(
-        f"{epoch + 1:>5d} :: {train:>16e} :: {val:>16e} :: "
-        f"{test:>16e} :: {best_val_yet:>16e}"
+        f"{epoch + 1:>5d} :: {train:>16e} :: {val:>16e} :: {best_val_yet:>16e}"
     )
 
 
@@ -93,14 +90,13 @@ def main():
     full_name = "_".join([timestamp] + sys_args.name)
     full_name = re.sub("[^a-zA-Z0-9_-]", "_", full_name)
 
-    run = wandb.init(project="flumen", config=hyperparams, name=full_name)
+    run = wandb.init(project="flumen", config=TRAIN_CONFIG, name=full_name)
 
     with data_path.open("rb") as f:
         data = pickle.load(f)
 
     train_data = TrajectoryDataset(data["train"])
     val_data = TrajectoryDataset(data["val"])
-    test_data = TrajectoryDataset(data["test"])
 
     model_args = {
         "state_dim": train_data.state_dim,
@@ -157,17 +153,15 @@ def main():
     bs = wandb.config["batch_size"]
     train_dl = DataLoader(train_data, batch_size=bs, shuffle=True)
     val_dl = DataLoader(val_data, batch_size=bs, shuffle=True)
-    test_dl = DataLoader(test_data, batch_size=bs, shuffle=True)
 
     # Evaluate initial loss
     model.eval()
     train_loss = validate(train_dl, loss, model, device)
     val_loss = validate(val_dl, loss, model, device)
-    test_loss = validate(test_dl, loss, model, device)
     early_stop.step(val_loss)
 
     print_header()
-    print_losses(0, train_loss, val_loss, test_loss, early_stop.best_val_loss)
+    print_losses(0, train_loss, val_loss, early_stop.best_val_loss)
 
     last_save_epoch = 0
 
@@ -181,14 +175,11 @@ def main():
         model.eval()
         train_loss = validate(train_dl, loss, model, device)
         val_loss = validate(val_dl, loss, model, device)
-        test_loss = validate(test_dl, loss, model, device)
 
         sched.step(val_loss)
         early_stop.step(val_loss)
 
-        print_losses(
-            epoch + 1, train_loss, val_loss, test_loss, early_stop.best_val_loss
-        )
+        print_losses(epoch + 1, train_loss, val_loss, early_stop.best_val_loss)
 
         if early_stop.best_model:
             torch.save(model.state_dict(), model_save_dir / "state_dict.pth")
@@ -199,7 +190,6 @@ def main():
 
             run.summary["best_train"] = train_loss
             run.summary["best_val"] = val_loss
-            run.summary["best_test"] = test_loss
             run.summary["best_epoch"] = epoch + 1
 
         wandb.log(
@@ -209,7 +199,6 @@ def main():
                 "lr": optimiser.param_groups[0]["lr"],
                 "train_loss": train_loss,
                 "val_loss": val_loss,
-                "test_loss": test_loss,
             }
         )
 
@@ -223,6 +212,12 @@ def main():
     run.log_model(model_save_dir.as_posix(), name=model_name, aliases=["best"])
 
     print(f"Training took {train_time:.2f} seconds.")
+
+    test_data = TrajectoryDataset(data["test"])
+    test_dl = DataLoader(test_data, batch_size=bs, shuffle=True)
+    test_loss = validate(test_dl, loss, model, device)
+    run.summary["test_loss"] = test_loss
+    print(f"Final test loss: {test_loss:>16e}")
 
 
 if __name__ == "__main__":
